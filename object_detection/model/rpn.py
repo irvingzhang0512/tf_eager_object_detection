@@ -57,19 +57,46 @@ class RPNTrainingProposal(tf.keras.Model):
         """
         生成训练rpn用的训练数据
         总体过程：
-        1. 计算anchors与gt_bbox（即输入数据中的bbox，数量一般比较少）的iou。
+        1. 计算anchors与gt_bbox（即输入数据中的bbox）的iou。
         2. 设置（iou > 0.7）或与每个gt_bbox iou最大的anchor为整理，数量最多为
         3. 设置 iou < 0.3 的anchor为反例。
         4. 设置其他anchor不参与训练。
         5. 返回参与训练anchor的ids，以及这些ids根据顺序排列的label列表
+        6. 对于正例，还需要返回其对应的 gt_bbox 的编号
         :param inputs:
         :param training:
         :param mask:
         :return:
         """
-        # TODO: get rpn proposal training data
         anchors, gt_bboxes = inputs
+
+        # [anchors_size, gt_bboxes_size]
+        labels = -tf.ones((anchors.shape[0],), tf.int32)
         iou = pairwise_iou(anchors, gt_bboxes)
+
+        # 设置与任意gt_bbox的iou > pos_iou_threshold 的 anchor 为正例
+        # 设置与所有gt_bbox的iou < neg_iou_threshold 的 anchor 为反例
+        max_scores = tf.argmax(iou, axis=1)
+        labels = tf.where(max_scores > self._pos_iou_threshold, tf.ones_like(labels), labels)
+        labels = tf.where(max_scores < self._neg_iou_threshold, tf.zeros_like(labels), labels)
+
+        # 计算正反例真实数量
+        total_pos_num = tf.reduce_sum(tf.where(labels == 1, tf.ones_like(labels), tf.zeros_like(labels)))
+        total_neg_num = tf.reduce_sum(tf.where(labels == 0, tf.ones_like(labels), tf.zeros_like(labels)))
+
+        # 根据要求，修正正反例数量
+        cur_pos_num = tf.minimum(total_pos_num, self._max_pos_samples)
+        cur_neg_num = tf.minimum(self._total_num_samples - cur_pos_num, total_neg_num)
+
+        # 随机选择正例和反例
+        _, total_pos_index = tf.nn.top_k(max_scores, total_pos_num, sorted=False)
+        _, total_neg_index = tf.nn.top_k(-max_scores, total_neg_num, sorted=False)
+        pos_index = tf.gather(total_pos_index, tf.random_shuffle(tf.range(0, total_pos_num))[:cur_pos_num])
+        neg_index = tf.gather(total_neg_index, tf.random_shuffle(tf.range(0, total_neg_num))[:cur_neg_num])
+
+        # 生成最终结果
+        selected_idx = tf.concat([pos_index, neg_index], axis=0)
+        return selected_idx, tf.gather(labels, selected_idx), tf.gather(max_scores, selected_idx)
 
 
 class RPNProposal(tf.keras.Model):
@@ -77,13 +104,15 @@ class RPNProposal(tf.keras.Model):
                  num_pre_nms_train=12000,
                  num_post_nms_train=2000,
                  num_pre_nms_test=6000,
-                 num_post_nms_test=2000,):
+                 num_post_nms_test=2000,
+                 nms_iou_threshold=0.7,):
         super().__init__()
 
         self._num_pre_nms_train = num_pre_nms_train
         self._num_post_nms_train = num_post_nms_train
         self._num_pre_nms_test = num_pre_nms_test
         self._num_post_nms_test = num_post_nms_test
+        self._nms_iou_threshold = nms_iou_threshold
 
     def call(self, inputs, training=None, mask=None):
         """
@@ -117,9 +146,9 @@ class RPNProposal(tf.keras.Model):
         decoded_bboxes = tf.gather(decoded_bboxes, idx)
         scores = tf.gather(scores, idx)
 
-        # TODO: nms
-
-        # post nms top k
+        # nms & post nms top k
         cur_top_k = tf.minimum(num_post_nms, tf.size(scores))
-        _, idx = tf.nn.top_k(scores, k=cur_top_k, sorted=False)
-        return tf.gather(decoded_bboxes, idx)
+        selected_idx = tf.image.non_max_suppression(decoded_bboxes, scores, cur_top_k,
+                                                    iou_threshold=self._nms_iou_threshold)
+
+        return tf.gather(decoded_bboxes, selected_idx), tf.gather(scores, selected_idx)
