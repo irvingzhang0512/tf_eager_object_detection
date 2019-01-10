@@ -39,11 +39,22 @@
     + faster rcnn.
         + feature extractor.
         + rpn.
-        + roi pooling.
+            + rpn head
+            + rpn proposal
+            + rpn training sampler & losses
+        + roi.
+            + roi pooling
+            + roi head
+            + roi training sampler & losses
+        + prediction.
+            + generate final prediction results.
         + anchor generator.
-        + bbox transformations.
-        + ground truth generator.
-        + bbox & classes classifier by rois and shared features.
+            + base generator.
+            + anchor filter(TODO)
+        + bbox ops.
+            + (anchors, gt_bboxes) -> (tx ty tw th)
+            + (anchors, bboxes_txtytwth) -> (target bboxes)
+            + cal iou.
     + ssd
 + train
 + predict
