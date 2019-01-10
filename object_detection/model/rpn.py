@@ -1,6 +1,7 @@
 import tensorflow as tf
-from object_detection.utils.bbox_transform import decode_bbox
+from object_detection.utils.bbox_transform import decode_bbox, encode_bbox
 from object_detection.utils.bbox_tf import pairwise_iou
+from object_detection.model.losses import cls_loss, smooth_l1_loss
 
 layers = tf.keras.layers
 
@@ -118,7 +119,7 @@ class RPNProposal(tf.keras.Model):
         """
         生成后续 RoiPooling 用的bboxes，返回结果直接用于roi pooling
         总体过程：
-        1. 使用anchors和rpn_pred获取所有预测结果。
+        1. 使用anchors使用rpn_pred修正，获取所有预测结果。
         2. 根据rpn_score获取num_pre_nms个anchors。
         3. 对选中anchors进行处理（边界修正、删除非常小的anchors）
         4. 进行nms。
@@ -131,11 +132,11 @@ class RPNProposal(tf.keras.Model):
         # [num_anchors*feature_width*feature_height, 4]
         # [num_anchors, 4]
         # [num_anchors*feature_width*feature_height,]
-        encoded_bboxes, anchors, scores = inputs
+        bboxes_txtytwth, anchors, scores = inputs
 
         # 预测结果从这里面选
         # [num_anchors*feature_width*feature_height, 4]
-        decoded_bboxes = decode_bbox(anchors, encoded_bboxes)
+        decoded_bboxes = decode_bbox(anchors, bboxes_txtytwth)
 
         num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
         num_post_nms = self._num_post_nms_train if training else self._num_post_nms_test
@@ -152,3 +153,42 @@ class RPNProposal(tf.keras.Model):
                                                     iou_threshold=self._nms_iou_threshold)
 
         return tf.gather(decoded_bboxes, selected_idx), tf.gather(scores, selected_idx)
+
+
+class RpnTrainingModel(tf.keras.Model):
+    def __init__(self,
+                 cls_loss_weight=1.0,
+                 reg_loss_weight=2.0, ):
+        super().__init__()
+        self._cls_loss_weight = cls_loss_weight
+        self._reg_loss_weight = reg_loss_weight
+
+        self._rpn_training_proposal = RPNTrainingProposal()
+
+    def call(self, inputs, training=None, mask=None):
+        rpn_score, rpn_bboxes_txtytwth, anchors, gt_bboxes = inputs
+
+        # RPN 训练相关
+        # 获取 rpn 的训练数据
+        rpn_training_idx, rpn_training_labels, rpn_training_gt_bbox_idx = self._rpn_training_proposal(anchors,
+                                                                                                      gt_bboxes)
+
+        # inputs: rpn_training_idx, rpn_training_labels & rpn_score
+        rpn_training_score = tf.gather(rpn_score, rpn_training_idx)
+        rpn_cls_loss = cls_loss(rpn_training_score, rpn_training_labels, weight=self._cls_loss_weight)
+
+        # inputs: rpn_training_idx, rpn_training_labels, rpn_training_gt_bbox_idx,
+        #         rpn_bboxes_txtytwth, anchors & gt_bboxes
+        # 1. rpn_bboxes_txtytwth 获取的是模型预测的修正值 tx ty tw th。
+        # 2. 通过 rpn_training_idx, anchors, rpn_training_gt_bbox_idx, gt_bboxes 可获取真实修正值 ttx, tty ttw tth。
+        # 3. 通过 rpn_training_idx, rpn_training_labels 可设置 loss 的weight，即只计算正例的回归损失函数。
+        # 4. 通过1中的预测结果以及2中的真实结果，结合3中的损失函数权重，计算smooth L1损失函数。
+        selected_anchors = tf.gather(anchors, rpn_training_idx)
+        selected_gt_bboxes = tf.gather(gt_bboxes, rpn_training_gt_bbox_idx)
+        bboxes_txtytwth_gt = encode_bbox(selected_anchors, selected_gt_bboxes)
+        bboxes_txtytwth_pred = tf.gather(rpn_bboxes_txtytwth, rpn_training_idx)
+        rpn_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
+                                      inside_weights=rpn_training_labels,
+                                      outside_weights=self._reg_loss_weight)
+
+        return rpn_cls_loss, rpn_reg_loss
