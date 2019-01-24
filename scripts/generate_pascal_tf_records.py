@@ -2,7 +2,7 @@ import os
 import sys
 import tensorflow as tf
 import argparse
-import object_detection.dataset.dataset_utils as dataset_utils
+import object_detection.dataset.tf_record_utils as dataset_utils
 import object_detection.dataset.label_map_utils as label_map_utils
 from tqdm import tqdm
 from lxml import etree
@@ -79,4 +79,3 @@ def _parse_arguments(argv):
 
 if __name__ == '__main__':
     main(_parse_arguments(sys.argv[1:]))
-

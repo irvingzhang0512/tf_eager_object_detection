@@ -40,6 +40,9 @@ def pairwise_iou(boxlist1, boxlist2):
     Returns:
       a tensor with shape [N, M] representing pairwise iou scores.
     """
+    boxlist1 = tf.to_float(boxlist1)
+    boxlist2 = tf.to_float(boxlist2)
+
     intersections = pairwise_intersection(boxlist1, boxlist2)
     areas1 = area(boxlist1)
     areas2 = area(boxlist2)

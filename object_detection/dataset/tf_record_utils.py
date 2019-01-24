@@ -40,4 +40,3 @@ def recursive_parse_xml_to_dict(xml):
 def get_multi_tf_record_writers(base_path, file_pattern, number, mode):
     writers_path = [os.path.join(base_path, file_pattern % (mode, i)) for i in range(number)]
     return [tf.python_io.TFRecordWriter(writer_path) for writer_path in writers_path]
-

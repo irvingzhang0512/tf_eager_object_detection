@@ -36,7 +36,7 @@ def decode_bbox(anchors, bboxes_txtytwth):
     https://github.com/chenyuntc/simple-faster-rcnn-pytorch/blob/master/model/utils/bbox_tools.py
     :param anchors:  (N, 4), ymin xmin ymax xmax
     :param bboxes_txtytwth:  (N, 4), dy dx dh dw
-    :return:
+    :return:                ymin xmin ymax xmax
     """
     src_bbox = anchors.astype(anchors.dtype, copy=False)
 
@@ -55,9 +55,9 @@ def decode_bbox(anchors, bboxes_txtytwth):
     h = np.exp(dh) * src_height
     w = np.exp(dw) * src_width
 
-    dst_bbox = np.zeros(src_height.shape, dtype=src_height.dtype)
+    dst_bbox = np.zeros(src_bbox.shape, dtype=src_height.dtype)
     dst_bbox[:, 0] = ctr_y - 0.5 * h
     dst_bbox[:, 1] = ctr_x - 0.5 * w
     dst_bbox[:, 2] = ctr_y + 0.5 * h
     dst_bbox[:, 3] = ctr_x + 0.5 * w
-    return bboxes
+    return dst_bbox

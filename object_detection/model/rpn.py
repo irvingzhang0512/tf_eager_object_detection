@@ -2,6 +2,7 @@ import tensorflow as tf
 from object_detection.utils.bbox_transform import decode_bbox, encode_bbox
 from object_detection.utils.bbox_tf import pairwise_iou
 from object_detection.model.losses import cls_loss, smooth_l1_loss
+from object_detection.utils.anchors import anchors_filter
 
 layers = tf.keras.layers
 
@@ -77,13 +78,15 @@ class RPNTrainingProposal(tf.keras.Model):
 
         # 设置与任意gt_bbox的iou > pos_iou_threshold 的 anchor 为正例
         # 设置与所有gt_bbox的iou < neg_iou_threshold 的 anchor 为反例
-        max_scores = tf.argmax(iou, axis=1)
+        max_scores = tf.reduce_max(iou, axis=1)
+        gt_bboxes_id = tf.argmax(iou, axis=1)
         labels = tf.where(max_scores > self._pos_iou_threshold, tf.ones_like(labels), labels)
         labels = tf.where(max_scores < self._neg_iou_threshold, tf.zeros_like(labels), labels)
 
         # 计算正反例真实数量
-        total_pos_num = tf.reduce_sum(tf.where(labels == 1, tf.ones_like(labels), tf.zeros_like(labels)))
-        total_neg_num = tf.reduce_sum(tf.where(labels == 0, tf.ones_like(labels), tf.zeros_like(labels)))
+        total_pos_num = tf.reduce_sum(tf.where(tf.equal(labels, 1), tf.ones_like(labels), tf.zeros_like(labels)))
+        total_neg_num = tf.reduce_sum(tf.where(tf.equal(labels, 0), tf.ones_like(labels), tf.zeros_like(labels)))
+        print(total_pos_num, total_neg_num)
 
         # 根据要求，修正正反例数量
         cur_pos_num = tf.minimum(total_pos_num, self._max_pos_samples)
@@ -97,7 +100,7 @@ class RPNTrainingProposal(tf.keras.Model):
 
         # 生成最终结果
         selected_idx = tf.concat([pos_index, neg_index], axis=0)
-        return selected_idx, tf.gather(labels, selected_idx), tf.gather(max_scores, selected_idx)
+        return selected_idx, tf.gather(labels, selected_idx), tf.gather(gt_bboxes_id, selected_idx)
 
 
 class RPNProposal(tf.keras.Model):
@@ -130,13 +133,15 @@ class RPNProposal(tf.keras.Model):
         :return:
         """
         # [num_anchors*feature_width*feature_height, 4]
-        # [num_anchors, 4]
+        # [num_anchors*feature_width*feature_height, 4]
         # [num_anchors*feature_width*feature_height,]
         bboxes_txtytwth, anchors, scores = inputs
 
         # 预测结果从这里面选
         # [num_anchors*feature_width*feature_height, 4]
         decoded_bboxes = decode_bbox(anchors, bboxes_txtytwth)
+        # TODO: remove magic number
+        decoded_bboxes = anchors_filter(decoded_bboxes, 0, 384, 16)
 
         num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
         num_post_nms = self._num_post_nms_train if training else self._num_post_nms_test
@@ -149,7 +154,7 @@ class RPNProposal(tf.keras.Model):
 
         # nms & post nms top k
         cur_top_k = tf.minimum(num_post_nms, tf.size(scores))
-        selected_idx = tf.image.non_max_suppression(decoded_bboxes, scores, cur_top_k,
+        selected_idx = tf.image.non_max_suppression(tf.to_float(decoded_bboxes), scores, cur_top_k,
                                                     iou_threshold=self._nms_iou_threshold)
 
         return tf.gather(decoded_bboxes, selected_idx), tf.gather(scores, selected_idx)
@@ -170,8 +175,10 @@ class RpnTrainingModel(tf.keras.Model):
 
         # RPN 训练相关
         # 获取 rpn 的训练数据
-        rpn_training_idx, rpn_training_labels, rpn_training_gt_bbox_idx = self._rpn_training_proposal(anchors,
-                                                                                                      gt_bboxes)
+        rpn_training_idx, rpn_training_labels, rpn_training_gt_bbox_idx = self._rpn_training_proposal((anchors,
+                                                                                                      gt_bboxes),
+                                                                                                      training,
+                                                                                                      mask)
 
         # inputs: rpn_training_idx, rpn_training_labels & rpn_score
         rpn_training_score = tf.gather(rpn_score, rpn_training_idx)
@@ -185,7 +192,7 @@ class RpnTrainingModel(tf.keras.Model):
         # 4. 通过1中的预测结果以及2中的真实结果，结合3中的损失函数权重，计算smooth L1损失函数。
         selected_anchors = tf.gather(anchors, rpn_training_idx)
         selected_gt_bboxes = tf.gather(gt_bboxes, rpn_training_gt_bbox_idx)
-        bboxes_txtytwth_gt = encode_bbox(selected_anchors, selected_gt_bboxes)
+        bboxes_txtytwth_gt = encode_bbox(selected_anchors.numpy(), selected_gt_bboxes.numpy())
         bboxes_txtytwth_pred = tf.gather(rpn_bboxes_txtytwth, rpn_training_idx)
         rpn_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
                                       inside_weights=rpn_training_labels,
