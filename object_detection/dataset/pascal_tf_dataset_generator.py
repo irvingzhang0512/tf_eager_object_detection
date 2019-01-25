@@ -9,12 +9,9 @@ __all__ = ['get_dataset']
 
 def _get_default_iaa_sequence():
     return [
-            iaa.Flipud(0.5),
-            iaa.Multiply((1.0, 1.5)),
-            iaa.Fliplr(0.5),
-            iaa.Crop(percent=(0, 0.2), keep_size=False),
-            iaa.Scale({"height": 384, "width": 384}),
-        ]
+        iaa.Flipud(0.5),
+        iaa.Fliplr(0.5),
+    ]
 
 
 def _parse_tf_records(serialized_example):
@@ -42,12 +39,16 @@ def _parse_tf_records(serialized_example):
                                     features['image/object/bbox/xmin'],
                                     features['image/object/bbox/ymax'],
                                     features['image/object/bbox/xmax'])), name='bboxes')
-    return image, bboxes, features['image/object/class/label'], features['image/object/class/text']
+    return image, bboxes, features['image/height'][0], features['image/width'][0], features['image/object/class/label'], \
+           features['image/object/class/text']
 
 
 def _image_argument_with_imgaug(image, bboxes, iaa_sequence=None):
     """
     增强一张图片
+    输入图像是 tf.uint8 类型，数据范围 [0, 255]
+    输入bboxes是 tf.float32 类型，数据范围 [0, 1]
+    返回结果与输入相同
     :param image:   一张图片，类型为ndarray，shape为[None, None, 3]
     :param bboxes:  一组bounding box，shape 为 [bbox_number, 4]，顺序为 ymin, xmin, ymax, xmax
                         float类型，取值范围[0, 1]
@@ -74,15 +75,43 @@ def _image_argument_with_imgaug(image, bboxes, iaa_sequence=None):
     bboxes_aug_list = []
     height, width, channels = image_aug.shape
     for iaa_bbox in bbs_aug.bounding_boxes:
-        bboxes_aug_list.append([iaa_bbox.x1 / width, iaa_bbox.y1 / height, iaa_bbox.x2 / width, iaa_bbox.y2 / height])
+        bboxes_aug_list.append([iaa_bbox.y1 / height, iaa_bbox.x1 / width, iaa_bbox.y2 / height, iaa_bbox.x2 / width])
     bboxes_aug_np = np.array(bboxes_aug_list)
     bboxes_aug_np[bboxes_aug_np < 0] = 0
     bboxes_aug_np[bboxes_aug_np > 1] = 1
     return image_aug, bboxes_aug_np.astype(np.float32)
 
 
+def _caffe_preprocessing(image):
+    """
+    输入 uint8 RGB 的图像，转换为 tf.float32 BGR 格式，并减去 imagenet 平均数
+    :param image:
+    :return:
+    """
+    image = tf.to_float(image)
+    image = image[..., ::-1]
+    means = [103.939, 116.779, 123.68]
+    channels = tf.split(axis=-1, num_or_size_splits=3, value=image)
+    for i in range(3):
+        channels[i] -= means[i]
+    return tf.concat(axis=-1, values=channels)
+
+
+def _tf_preprocessing(image):
+    """
+    输入 uint8 RGB 的图像，转换为 tf.float32 RGB 格式，取值范围[0, 1]
+    :param image:
+    :return:
+    """
+    return tf.image.convert_image_dtype(image, tf.float32)
+
+
 def get_dataset(tf_records_list,
+                min_size=600,
+                max_size=2000,
+                preprocessing_type='caffe',
                 batch_size=1,
+                repeat=1,
                 shuffle=False, shuffle_buffer_size=1000,
                 prefetch=False, prefetch_buffer_size=1000,
                 argument=True, iaa_sequence=None):
@@ -92,29 +121,30 @@ def get_dataset(tf_records_list,
     1) 从 tfrecords 文件中读取基本数据；
     2) 如果需要数据增强，则通过输入的 iaa_sequence 进行；
     3) 改变图片的数据格式，从 uint8 （即[0, 255]）到 float32 （即[0, 1]）
-    4) shuffle操作；
-    5) prefetch操作；
-    6) batch操作。
+    4) shuffle 操作；
+    5) prefetch 操作；
+    6) batch 操作。
+    7) repeat 操作
 
     其中，默认数据增强包括：
     ```
     iaa_sequence = [
             iaa.Flipud(0.5),
             iaa.Fliplr(0.5),
-            iaa.Multiply((1.0, 1.5)),
-            iaa.Crop(percent=(0, 0.2), keep_size=False),
-            iaa.Scale({"height": 384, "width": 384}),
         ]
     ```
     1) 随机水平、垂直翻转；
-    2) 随机亮度增强；
-    3) 随机切片
-    4) 将图片 resize 到 384*384
+    2) 随机切片
 
     当通过 itr 进行操作时，该 dataset 返回的数据包括：
     image, bboxes, labels, labels_text
-    数据类型分别是：tf.float32([0, 1]), tf.float32([0, 1]), tf.int32([0, num_classes]), tf.string
+    数据类型分别是：tf.float32([0, 1]), tf.float32([0, 边长]), tf.int32([0, num_classes]), tf.string
+    shape为：[1, height, width, 3], [1, num_bboxes, 4], [num_bboxes], [num_bboxes]
 
+    :param preprocessing_type:
+    :param min_size:
+    :param max_size:
+    :param repeat:
     :param tf_records_list:
     :param batch_size:
     :param shuffle:
@@ -131,19 +161,84 @@ def get_dataset(tf_records_list,
     if argument:
         image_argument_partial = partial(_image_argument_with_imgaug, iaa_sequence=iaa_sequence)
         dataset = dataset.map(
-            lambda image, bboxes, labels, labels_text: tuple([
+            lambda image, bboxes, image_height, image_width, labels, labels_text: tuple([
                 *tf.py_func(image_argument_partial, [image, bboxes], [image.dtype, bboxes.dtype]),
-                labels, labels_text])
+                image_height, image_width, labels, labels_text])
         )
 
-    dataset = dataset.map(lambda image, bboxes, labels, labels_text:
-                          tuple([tf.image.convert_image_dtype(image, tf.float32), bboxes, labels, labels_text]))
+    def _map_after_batch(image, bboxes, height, width, labels, labels_text):
+        """
+        rescale image
+        1) 短边最短为600，长边最长为2000，矛盾时，有限满足长边2000
+        2) 输入数据bboxes，本来是[0, 1]， 转换为像素值
+        3) 通过 preprocessing_type 选择 preprocessing 函数
+        :param image: 
+        :param bboxes: 
+        :param labels: 
+        :param labels_text: 
+        :return: 
+        """
+        print(height)
+        print(width)
+        height = tf.to_float(height[0])
+        width = tf.to_float(width[0])
+        scale1 = min_size / tf.minimum(height, width)
+        scale2 = max_size / tf.minimum(height, width)
+        scale = tf.minimum(scale1, scale2)
+        n_height = scale * height
+        n_width = scale * width
+
+        channels = tf.split(axis=-1, num_or_size_splits=4, value=bboxes)
+        channels[0] = channels[0] * n_height
+        channels[1] = channels[1] * n_width
+        channels[2] = channels[2] * n_height
+        channels[3] = channels[3] * n_width
+        bboxes = tf.concat(channels, axis=-1)
+
+        image = tf.image.resize_bilinear(image, (tf.to_int32(n_height), tf.to_int32(n_width)))
+
+        if preprocessing_type == 'caffe':
+            preprocessing_fn = _caffe_preprocessing
+        elif preprocessing_type == 'tf':
+            preprocessing_fn = _tf_preprocessing
+        else:
+            raise ValueError('unknown preprocessing type {}'.format(preprocessing_type))
+
+        return preprocessing_fn(image), bboxes, labels, labels_text
+
+    dataset = dataset.batch(batch_size=batch_size).map(_map_after_batch)
 
     if shuffle:
         dataset = dataset.shuffle(buffer_size=shuffle_buffer_size)
     if prefetch:
         dataset = dataset.prefetch(buffer_size=prefetch_buffer_size)
 
-    return dataset.batch(batch_size=batch_size)
+    return dataset.repeat(repeat)
 
 
+if __name__ == '__main__':
+    tfs = ['/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_00.tfrecords',
+           '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_01.tfrecords',
+           '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_02.tfrecords',
+           '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_03.tfrecords',
+           '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_04.tfrecords', ]
+    d = get_dataset(tfs)
+    tf.enable_eager_execution()
+    import matplotlib.pyplot as plt
+    from object_detection.utils.visual_utils import draw_bboxes_with_labels
+
+    for idx, (image, bboxes, labels, labels_text) in enumerate(d):
+        means = [103.939, 116.779, 123.68]
+        image = tf.squeeze(image, axis=0).numpy()
+        image[..., 0] += means[0]
+        image[..., 1] += means[1]
+        image[..., 2] += means[2]
+        image = image[..., ::-1]
+        image = image.astype(np.uint8)
+        image_with_bboxes = draw_bboxes_with_labels(image / 255, tf.squeeze(bboxes, axis=0),
+                                                    tf.squeeze(labels_text, axis=0))
+        plt.imshow(image_with_bboxes)
+        print(image_with_bboxes.shape)
+        plt.show()
+        if idx == 5:
+            break

@@ -2,6 +2,7 @@ import tensorflow as tf
 from object_detection.utils.bbox_tf import pairwise_iou
 from object_detection.model.losses import cls_loss, smooth_l1_loss
 from object_detection.utils.bbox_transform import encode_bbox
+from object_detection.model.rpn import RPNProposal, rpn_proposal_filter
 
 layers = tf.keras.layers
 
@@ -32,26 +33,28 @@ class RoiPooling(tf.keras.Model):
             xmin = tf.to_int32(roi[1])
             ymax = tf.to_int32(roi[2])
             xmax = tf.to_int32(roi[3])
+            # print(ymin.numpy(), xmin.numpy(), ymax.numpy(), xmax.numpy())
+            # print(ymin.numpy()*16, xmin.numpy()*16, ymax.numpy()*16, xmax.numpy()*16)
             res.append(
                 tf.image.resize_bilinear(shared_layers[:, ymin:ymax + 1, xmin:xmax + 1, :],
                                          [self._pool_size, self._pool_size]))
-
         net = self._concat_layer(res)
-        print(net.shape)
         return self._flatten_layer(net)
 
 
 class RoiHead(tf.keras.Model):
-    def __init__(self, num_classes, ):
+    def __init__(self, num_classes, keep_rate=0.5):
         super().__init__()
         self._num_classes = num_classes
 
         # TODO: Dense 层的细节
-        self._fc1 = layers.Dense(4096)
-        self._fc2 = layers.Dense(4096)
+        self._fc1 = layers.Dense(4096, activation=tf.nn.relu)
+        self._dropout1 = layers.Dropout(rate=1 - keep_rate)
+        self._fc2 = layers.Dense(4096, activation=tf.nn.relu)
+        self._dropout2 = layers.Dropout(rate=1 - keep_rate)
 
-        self._score_prediction = layers.Dense(num_classes)
-        self._bbox_prediction = layers.Dense(4)
+        self._score_prediction = layers.Dense(num_classes, activation=tf.nn.softmax)
+        self._bbox_prediction = layers.Dense(4 * num_classes)
 
     def call(self, inputs, training=None, mask=None):
         """
@@ -63,7 +66,9 @@ class RoiHead(tf.keras.Model):
         :return:
         """
         net = self._fc1(inputs)
+        net = self._dropout1(net, training)
         net = self._fc2(net)
+        net = self._dropout2(net, training)
         roi_score = self._score_prediction(net)
         roi_bboxes_txtytwth = self._bbox_prediction(net)
 
@@ -86,6 +91,7 @@ class RoiTrainingProposal(tf.keras.Model):
     def call(self, inputs, training=None, mask=None):
         """
         生成训练roi用的数据
+        该部分不参与梯度下降，可以使用Numpy操作
         总体过程：
         1. 计算 rois 与gt_bbox（即输入数据中的bbox）的iou。
         2. 设置（iou > 0.7）或与每个gt_bbox iou最大的anchor为整理，数量最多为
@@ -128,44 +134,81 @@ class RoiTrainingProposal(tf.keras.Model):
 
         # 生成最终结果
         selected_idx = tf.concat([pos_index, neg_index], axis=0)
-        return selected_idx, tf.gather(labels, selected_idx), tf.gather(gt_bbox_idx, selected_idx)
+        return tf.stop_gradient(selected_idx), \
+               tf.stop_gradient(tf.gather(labels, selected_idx)), \
+               tf.stop_gradient(tf.gather(gt_bbox_idx, selected_idx))
 
 
 class RoiTrainingModel(tf.keras.Model):
     def __init__(self,
+                 extractor_stride=16,
+                 num_classes=21,
+                 roi_pooling_size=7,
                  cls_loss_weight=1.0,
-                 reg_loss_weight=2.0, ):
+                 reg_loss_weight=1.0, ):
         super().__init__()
+        self._num_classes = num_classes
+
+        self._extractor_stride = extractor_stride
         self._cls_loss_weight = cls_loss_weight
         self._reg_loss_weight = reg_loss_weight
 
+        self._rpn_proposal = RPNProposal()
+        self._roi_pooling = RoiPooling(roi_pooling_size)
+        self._roi_head = RoiHead(num_classes)
         self._roi_training_proposal = RoiTrainingProposal()
 
     def call(self, inputs, training=None, mask=None):
-        rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth, gt_bboxes, gt_labels = inputs
+        shared_features, anchors, rpn_score, rpn_bboxes_txtytwth, gt_bboxes, gt_labels = inputs
         gt_labels = tf.to_int32(gt_labels)
 
-        # ROI 训练相关
+        # Rpn Proposal
+        # 不参与训练
+        rpn_proposals_bboxes, _ = self._rpn_proposal((rpn_bboxes_txtytwth,
+                                                      anchors,
+                                                      rpn_score[:, 1]), training, mask)
+        _, height, width, _ = shared_features.get_shape().as_list()
+        height = height * self._extractor_stride
+        width = width * self._extractor_stride
+        rpn_proposals_bboxes = rpn_proposal_filter(rpn_proposals_bboxes,
+                                                   0, height, width, self._extractor_stride)
+
+        # ROI Pooling
+        # 不参与训练
+        roi_features = self._roi_pooling((shared_features, rpn_proposals_bboxes / self._extractor_stride),
+                                         training, mask)
+
+        # Classifier
+        # 参与训练
+        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training, mask)
+
         # 获取 roi 的训练数据
+        # 不参与训练
         roi_training_idx, roi_training_labels, roi_training_gt_bbox_idx = self._roi_training_proposal(
-            (rpn_proposals_bboxes,
-             gt_bboxes), training, mask)
+            (rpn_proposals_bboxes, gt_bboxes), training, mask)
 
         # cal roi cls loss
+        # TODO: 仔细看下cls_loss的定义
         roi_training_score = tf.gather(roi_score, roi_training_idx)
         roi_cls_loss = cls_loss(logits=roi_training_score,
-                                labels=tf.gather(gt_labels, roi_training_gt_bbox_idx) * tf.to_int32(
-                                    roi_training_labels))
+                                labels=tf.gather(gt_labels, roi_training_gt_bbox_idx) * roi_training_labels,
+                                weight=self._cls_loss_weight)
 
         # cal roi bbox reg loss
         # inputs: roi_training_idx, roi_training_labels, roi_training_gt_bbox_idx,
         #         roi_predicting_bboxes, rpn_proposals_bboxes, gt_bboxes
         # 只计算正例的损失函数
+        bboxes_txtytwth_pred = tf.reshape(tf.gather(roi_bboxes_txtytwth, roi_training_idx),
+                                          [-1, self._num_classes, 4])  # [num_rois, num_classes, 4]
+        cur_pred_cls_id = tf.expand_dims(tf.argmax(roi_training_score, axis=1, output_type=tf.int32),
+                                         axis=-1)  # [num_rois, 1]
+        bboxes_txtytwth_pred = tf.squeeze(tf.batch_gather(bboxes_txtytwth_pred, cur_pred_cls_id),
+                                          axis=1)  # [num_rois, 4]
+
         selected_rpn_proposal_bboxes = tf.gather(rpn_proposals_bboxes, roi_training_idx)
         selected_gt_bboxes = tf.gather(gt_bboxes, roi_training_gt_bbox_idx)
         bboxes_txtytwth_gt = encode_bbox(selected_rpn_proposal_bboxes.numpy(),
                                          selected_gt_bboxes.numpy())
-        bboxes_txtytwth_pred = tf.gather(roi_bboxes_txtytwth, roi_training_idx)
         roi_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
                                       inside_weights=roi_training_labels,
                                       outside_weights=self._reg_loss_weight)

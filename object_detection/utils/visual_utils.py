@@ -13,13 +13,16 @@ def draw_bboxes_with_labels(image, bboxes, label_texts):
     """
     if isinstance(image, tf.Tensor):
         image = image.numpy()
-    height, width, channels = image.shape
+    if isinstance(bboxes, tf.Tensor):
+        bboxes = bboxes.numpy()
+    if isinstance(label_texts, tf.Tensor):
+        label_texts = label_texts.numpy()
     for bbox, cur_label in zip(bboxes, label_texts):
-        ymin, xmin, ymax, xmax = int(bbox[0] * height), int(bbox[1] * width), int(bbox[2] * height), int(
-            bbox[3] * width)
+        ymin, xmin, ymax, xmax = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+        # print(ymin, xmin, ymax, xmax)
         cv2.rectangle(image, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
         cv2.putText(img=image,
-                    text=str(cur_label.numpy()),
+                    text=str(cur_label),
                     org=(xmin, ymin + 10),
                     fontFace=cv2.FONT_HERSHEY_COMPLEX,
                     fontScale=1e-3 * image.shape[0],

@@ -30,31 +30,33 @@
     + ssd
 
 
-## 1. TODO
-+ dataset:
-    + generate tfrecords file from pascal source files.
-    + get `tf.data.Dataset` object from tfrecords files.
-    + use `imgaug` for data argumentation.
-+ model:
-    + faster rcnn.
-        + feature extractor.
-        + rpn.
-            + rpn head
-            + rpn proposal
-            + rpn training sampler & losses
-        + roi.
-            + roi pooling
-            + roi head
-            + roi training sampler & losses
-        + prediction.
-            + generate final prediction results.
-        + anchor generator.
-            + base generator.
-            + anchor filter(TODO)
-        + bbox ops.
-            + (anchors, gt_bboxes) -> (tx ty tw th)
-            + (anchors, bboxes_txtytwth) -> (target bboxes)
-            + cal iou.
-    + ssd
-+ train
-+ predict
+## 1. Architecture
++ `scripts`:
+    + `generate_pascal_tf_records.py`: generate tfrecords file from pascal source files.
++ `object_detection/dataset`:
+    + `pascal_tf_dataset_generator`: 
+        + get `tf.data.Dataset` object from tfrecords files.
+        + use `imgaug` for default data argumentation.
+    + `label_map_utils.py`: copy from TensorFlow Object Detection API.
+    + `tf_record_utils.py`: utils to generate tfrecords files.    
++ `object_detection/model`:
+    + `feature_extractor.py`: get shared features from raw image, usually use VGG16 & ResNet.
+        + copy codes from keras source codes.
+    + `faster_rcnn.py`: base model for faster rcnn. get shared features & rpn scores and rpn bboxes.
+        + has a `feature_extractor` implementing in `feature_extractor.py`.
+    + `rpn.py`: rpn training model & rpn proposal model.
+    + `roi.py`: roi training model.
+    + `losses.py`: cal class loss & reg loss for rpn training and roi training.
+
+## 2. TODO
++ [x]  use different preprocessing utils for different feature extractor.
++ [ ] compare current net with the original faster rcnn model.
++ [ ]  remove all magic number and use config dict to cover all params in faster rcnn.
++ [ ]  add summaries in training procedure.
++ [ ]  add model load/save functions.
++ [ ]  predict and visual scripts.
+
+
+## 3. 存在的问题
++ numpy 操作和 tensorflow 操作混杂，导致中间部分梯度传递有问题，需要仔细研究。
+

@@ -14,34 +14,34 @@ def _get_tf_example(xml_dict, label_map_dict, image_root):
         width = int(xml_dict['size']['width'])
         height = int(xml_dict['size']['height'])
 
-        xmin = []
-        ymin = []
-        xmax = []
-        ymax = []
-        classes = []
-        classes_text = []
-        if 'object' in xml_dict:
-            for obj in xml_dict['object']:
-                xmin.append(float(obj['bndbox']['xmin']) / width)
-                ymin.append(float(obj['bndbox']['ymin']) / height)
-                xmax.append(float(obj['bndbox']['xmax']) / width)
-                ymax.append(float(obj['bndbox']['ymax']) / height)
-                classes_text.append(obj['name'].encode('utf8'))
-                classes.append(label_map_dict[obj['name']])
+    xmin = []
+    ymin = []
+    xmax = []
+    ymax = []
+    classes = []
+    classes_text = []
+    if 'object' in xml_dict:
+        for obj in xml_dict['object']:
+            xmin.append(float(obj['bndbox']['xmin']) / width)
+            ymin.append(float(obj['bndbox']['ymin']) / height)
+            xmax.append(float(obj['bndbox']['xmax']) / width)
+            ymax.append(float(obj['bndbox']['ymax']) / height)
+            classes_text.append(obj['name'].encode('utf8'))
+            classes.append(label_map_dict[obj['name']])
 
-        example = tf.train.Example(features=tf.train.Features(feature={
-            'image/height': dataset_utils.int64_feature(height),
-            'image/width': dataset_utils.int64_feature(width),
-            'image/filename': dataset_utils.bytes_feature(xml_dict['filename'].encode('utf8')),
-            'image/encoded': dataset_utils.bytes_feature(encoded_jpg),
-            'image/object/bbox/xmin': dataset_utils.float_list_feature(xmin),
-            'image/object/bbox/xmax': dataset_utils.float_list_feature(xmax),
-            'image/object/bbox/ymin': dataset_utils.float_list_feature(ymin),
-            'image/object/bbox/ymax': dataset_utils.float_list_feature(ymax),
-            'image/object/class/label': dataset_utils.int64_list_feature(classes),
-            'image/object/class/text': dataset_utils.bytes_list_feature(classes_text),
-        }))
-        return example
+    example = tf.train.Example(features=tf.train.Features(feature={
+        'image/height': dataset_utils.int64_feature(height),
+        'image/width': dataset_utils.int64_feature(width),
+        'image/filename': dataset_utils.bytes_feature(xml_dict['filename'].encode('utf8')),
+        'image/encoded': dataset_utils.bytes_feature(encoded_jpg),
+        'image/object/bbox/xmin': dataset_utils.float_list_feature(xmin),
+        'image/object/bbox/xmax': dataset_utils.float_list_feature(xmax),
+        'image/object/bbox/ymin': dataset_utils.float_list_feature(ymin),
+        'image/object/bbox/ymax': dataset_utils.float_list_feature(ymax),
+        'image/object/class/label': dataset_utils.int64_list_feature(classes),
+        'image/object/class/text': dataset_utils.bytes_list_feature(classes_text),
+    }))
+    return example
 
 
 def main(args):
