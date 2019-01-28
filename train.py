@@ -1,9 +1,9 @@
 import tensorflow as tf
 from object_detection.model.feature_extractor import Vgg16Extractor
-from object_detection.model.faster_rcnn import BaseFasterRcnn, FasterRcnnEnd2EndTrainingModel
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset
-from object_detection.model.rpn import RpnTrainingModel
-from object_detection.model.roi import RoiTrainingModel
+from object_detection.model.faster_rcnn import BaseFasterRcnnModel, FasterRcnnTrainingModel, RpnTrainingModel, \
+    RoiTrainingModel
+from object_detection.config.faster_rcnn_config import CONFIG
 
 tf.enable_eager_execution()
 
@@ -21,13 +21,17 @@ def train_step(model, loss, tape, optimizer):
 
 
 def train(dataset, faster_rcnn_model, optimizer):
-    for images, gt_bboxes, gt_labels, gt_labels_text in dataset:
-        gt_bboxes = tf.squeeze(gt_bboxes, axis=0)
-        gt_labels = tf.squeeze(gt_labels, axis=0)
-        gt_labels_text = tf.squeeze(gt_labels_text, axis=0)
+    base_model, training_model = faster_rcnn_model
+    for image, gt_bboxes, gt_labels, gt_labels_text in dataset:
         with tf.GradientTape() as tape:
-            rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = faster_rcnn_model((images, gt_bboxes, gt_labels),
-                                                                                       True)
+            image_shape, anchors, rpn_score, rpn_bboxes_txtytwth, rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth = base_model(
+                image)
+            rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = training_model((gt_bboxes, gt_labels,
+                                                                                     image_shape, anchors,
+                                                                                     rpn_score, rpn_bboxes_txtytwth,
+                                                                                     rpn_proposals_bboxes,
+                                                                                     roi_score, roi_bboxes_txtytwth),
+                                                                                    True)
             train_step(faster_rcnn_model,
                        rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss,
                        tape,
@@ -37,16 +41,42 @@ def train(dataset, faster_rcnn_model, optimizer):
 
 
 def _get_default_base_model():
-    return FasterRcnnEnd2EndTrainingModel(
-        base_model=BaseFasterRcnn(
-            ratios=[0.5, 1, 2],
-            scales=[8 * 16, 16 * 16, 32 * 16],
-            extractor=Vgg16Extractor(),
-            extractor_stride=16,
-        ),
-        rpn_training_model=RpnTrainingModel(),
-        roi_training_model=RoiTrainingModel(),
+    base_model = BaseFasterRcnnModel(
+        ratios=CONFIG['ratios'],
+        scales=CONFIG['scales'],
+        extractor=Vgg16Extractor(),
+        extractor_stride=CONFIG['extractor_stride'],
+
+        rpn_proposal_num_pre_nms_train=12000,
+        rpn_proposal_num_post_nms_train=2000,
+        rpn_proposal_num_pre_nms_test=6000,
+        rpn_proposal_num_post_nms_test=300,
+        rpn_proposal_nms_iou_threshold=0.7,
+
+        roi_pool_size=7,
+        num_classes=21,
+        roi_head_keep_dropout_rate=0.5,
     )
+    training_model = FasterRcnnTrainingModel(
+        rpn_training_model=RpnTrainingModel(
+            cls_loss_weight=3,
+            reg_loss_weight=1,
+            rpn_training_pos_iou_threshold=0.7,
+            rpn_training_neg_iou_threshold=0.3,
+            rpn_training_total_num_samples=256,
+            rpn_training_max_pos_samples=128,
+        ),
+        roi_training_model=RoiTrainingModel(
+            num_classes=21,
+            cls_loss_weight=3,
+            reg_loss_weight=1,
+            roi_training_pos_iou_threshold=0.5,
+            roi_training_neg_iou_threshold=0.1,
+            roi_training_total_num_samples=128,
+            roi_training_max_pos_samples=32
+        ),
+    )
+    return base_model, training_model
 
 
 def _get_default_optimizer():

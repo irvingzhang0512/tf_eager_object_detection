@@ -1,7 +1,7 @@
-
 def get_default_faster_rcnn_config():
     return {
         'num_classes': 21,
+        'extractor_stride': 16,
         'epochs': 14,
 
         'max_size': 2000,
@@ -34,3 +34,6 @@ def get_default_faster_rcnn_config():
         'roi_pos_sample_max_number': 32,
 
     }
+
+
+CONFIG = get_default_faster_rcnn_config()

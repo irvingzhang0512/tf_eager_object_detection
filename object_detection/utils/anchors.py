@@ -108,14 +108,3 @@ def generate_anchors_np(scales, ratios, shape, feature_stride=1, anchor_stride=1
     boxes = np.concatenate([box_centers - 0.5 * box_sizes,
                             box_centers + 0.5 * box_sizes], axis=1)
     return boxes
-
-
-def anchors_filter(anchors, min_value, max_value, min_edge):
-    new_anchors = []
-    anchors[anchors > max_value] = max_value
-    anchors[anchors < min_value] = min_value
-    for ymin, xmin, ymax, xmax in anchors:
-        if (ymax - ymin) > min_edge and (xmax - xmin) > min_edge:
-            new_anchors.append([ymin, xmin, ymax, xmax])
-    return np.array(new_anchors)
-

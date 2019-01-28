@@ -1,121 +1,282 @@
 import tensorflow as tf
-from object_detection.model.rpn import RPNHead
-from object_detection.utils.anchors import generate_anchors_np, anchors_filter
-from object_detection.utils.bbox_transform import decode_bbox
+from object_detection.model.rpn import RPNHead, RPNTrainingProposal, RPNProposal
+from object_detection.model.roi import RoiTrainingProposal, RoiHead, RoiPooling
+from object_detection.utils.anchors import generate_anchors_np
+from object_detection.utils.bbox_transform import decode_bbox, encode_bbox
+from object_detection.model.losses import cls_loss, smooth_l1_loss
 
 layers = tf.keras.layers
 
 
-class BaseFasterRcnn(tf.keras.Model):
+class BaseFasterRcnnModel(tf.keras.Model):
     def __init__(self,
                  ratios,
                  scales,
-
                  extractor,
                  extractor_stride,
-                 ):
-        """
 
-        :param ratios:                      anchors基本信息
-        :param scales:                      anchors基本信息
-        :param extractor:                   参考 feature_extractor.py
-        :param extractor_stride:            表示 extractor 缩小原始图片的尺寸，faster rcnn 原始论文中为16
-        """
+                 rpn_proposal_num_pre_nms_train=12000,
+                 rpn_proposal_num_post_nms_train=2000,
+                 rpn_proposal_num_pre_nms_test=6000,
+                 rpn_proposal_num_post_nms_test=300,
+                 rpn_proposal_nms_iou_threshold=0.7,
+
+                 roi_pool_size=7,
+                 num_classes=21,
+                 roi_head_keep_dropout_rate=0.5,
+
+                 ):
         super().__init__()
+
         self._extractor = extractor
         self._extractor_stride = extractor_stride
-        self._ratios = ratios
-        self._scales = scales
 
         self._rpn_head = RPNHead(len(ratios) * len(scales))
 
+        self._ratios = ratios
+        self._scales = scales
+
+        self._rpn_proposal = RPNProposal(
+             num_pre_nms_train=rpn_proposal_num_pre_nms_train,
+             num_post_nms_train=rpn_proposal_num_post_nms_train,
+             num_pre_nms_test=rpn_proposal_num_pre_nms_test,
+             num_post_nms_test=rpn_proposal_num_post_nms_test,
+             nms_iou_threshold=rpn_proposal_nms_iou_threshold,
+        )
+        self._roi_pooling = RoiPooling(roi_pool_size)
+        self._roi_head = RoiHead(num_classes=num_classes,
+                                 keep_rate=roi_head_keep_dropout_rate)
+
     def call(self, inputs, training=None, mask=None):
         """
-        build faster r-cnn model
-        :param inputs:          shape [1, height, width, 3]
+        Faster R-CNN 基础网络
+
+        包括以下内容：
+        1）输入一张图片，通过 feature_extractor 提取特征；
+        2）获取 RPN 初步预测结果；
+        3）获取 Anchors；
+        4）获取 RPN Proposal 结果；
+        5）经过ROI Pooling，并获取进一步预测结果。
+
+        作用：
+        1. Faster R-CNN 模型的 save/load 的本质，就是对本模型的 save/load；
+        2. Faster R-CNN 的其他部分，只要超参数固定，就不会有变化；
+        3. 通过本模型输出，可以用于训练（计算损失函数）或预测（用于获取最终bboxes labels）结果。
+        :param inputs:
         :param training:
         :param mask:
         :return:
         """
-        # extract features
-        # 从 backbone 中提取特征图
-        # shape like [1, height/16, width/16, 512 or 1024]
+        # [1, image_height, image_width, 3]
+        image_shape = inputs.get_shape().as_list()[1:3]
+
+        # 1）输入一张图片，通过 feature_extractor 提取特征；
         shared_features = self._extractor(inputs, training, mask)
 
-        # RPN Net
+        # 2）获取 RPN 初步预测结果；
         # shape [1, num_anchors*feature_width*feature_height, 2], [1, num_anchors*feature_width*feature_height, 4]
         rpn_score, rpn_bboxes_txtytwth = self._rpn_head(shared_features, training, mask)
         rpn_score = tf.squeeze(rpn_score, axis=0)
         rpn_bboxes_txtytwth = tf.squeeze(rpn_bboxes_txtytwth, axis=0)
 
-        # anchors
-        _, height, width, _ = inputs.get_shape().as_list()
+        # 3）获取 Anchors；
         anchors = generate_anchors_np(self._scales, self._ratios,
-                                      (height//self._extractor_stride,
-                                       width//self._extractor_stride)) * self._extractor_stride
+                                      (image_shape[0] // self._extractor_stride,
+                                       image_shape[1] // self._extractor_stride)) * self._extractor_stride
 
-        return shared_features, anchors, rpn_score, rpn_bboxes_txtytwth
+        # 4）获取 RPN Proposal 结果；
+        rpn_proposals_bboxes = self._rpn_proposal((rpn_bboxes_txtytwth,
+                                                   anchors, rpn_score[:, 1],
+                                                   image_shape, self._extractor_stride), training, mask)
+
+        # 5）经过ROI Pooling，并获取进一步预测结果
+        roi_features = self._roi_pooling((shared_features, rpn_proposals_bboxes, self._extractor_stride),
+                                         training, mask)
+        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training, mask)
+
+        return image_shape, anchors, rpn_score, rpn_bboxes_txtytwth, rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth
 
 
-class FasterRcnnEnd2EndTrainingModel(tf.keras.Model):
+class RpnTrainingModel(tf.keras.Model):
     def __init__(self,
-                 base_model,
-                 rpn_training_model,
-                 roi_training_model):
+                 cls_loss_weight=3,
+                 reg_loss_weight=1,
+                 rpn_training_pos_iou_threshold=0.7,
+                 rpn_training_neg_iou_threshold=0.3,
+                 rpn_training_total_num_samples=256,
+                 rpn_training_max_pos_samples=128,):
         super().__init__()
-        self._base_model = base_model
+
+        self._cls_loss_weight = cls_loss_weight
+        self._reg_loss_weight = reg_loss_weight
+        self._rpn_training_proposal = RPNTrainingProposal(
+             pos_iou_threshold=rpn_training_pos_iou_threshold,
+             neg_iou_threshold=rpn_training_neg_iou_threshold,
+             total_num_samples=rpn_training_total_num_samples,
+             max_pos_samples=rpn_training_max_pos_samples,
+        )
+
+    def call(self, inputs, training=None, mask=None):
+        """
+        获取 RPN 训练网络损失函数值
+        :param inputs:
+        :param training:
+        :param mask:
+        :return:
+        """
+        image_shape, anchors, rpn_score, rpn_bboxes_txtytwth, gt_bboxes = inputs
+
+        # 获取 rpn 的训练数据
+        rpn_training_idx, rpn_training_labels, rpn_training_gt_bbox_idx = self._rpn_training_proposal((anchors,
+                                                                                                       gt_bboxes,
+                                                                                                       image_shape),
+                                                                                                      training,
+                                                                                                      mask)
+
+        # inputs: rpn_training_idx, rpn_training_labels & rpn_score
+        rpn_training_score = tf.gather(rpn_score, rpn_training_idx)
+        rpn_cls_loss = cls_loss(rpn_training_score, rpn_training_labels, weight=self._cls_loss_weight)
+
+        # inputs: rpn_training_idx, rpn_training_labels, rpn_training_gt_bbox_idx,
+        #         rpn_bboxes_txtytwth, anchors & gt_bboxes
+        # 1. rpn_bboxes_txtytwth 获取的是模型预测的修正值 tx ty tw th。
+        # 2. 通过 rpn_training_idx, anchors, rpn_training_gt_bbox_idx, gt_bboxes 可获取真实修正值 ttx, tty ttw tth。
+        # 3. 通过 rpn_training_idx, rpn_training_labels 可设置 loss 的weight，即只计算正例的回归损失函数。
+        # 4. 通过1中的预测结果以及2中的真实结果，结合3中的损失函数权重，计算smooth L1损失函数。
+        # 计算损失函数中的 label，可以使用Numpy
+        selected_anchors = tf.gather(anchors, rpn_training_idx)
+        selected_gt_bboxes = tf.gather(gt_bboxes, rpn_training_gt_bbox_idx)
+        bboxes_txtytwth_gt = encode_bbox(selected_anchors.numpy(), selected_gt_bboxes.numpy())
+        # 计算损失函数中的logits，不能使用numpy
+        bboxes_txtytwth_pred = tf.gather(rpn_bboxes_txtytwth, rpn_training_idx)
+
+        rpn_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
+                                      inside_weights=rpn_training_labels,
+                                      outside_weights=self._reg_loss_weight, )
+
+        return rpn_cls_loss, rpn_reg_loss
+
+
+class RoiTrainingModel(tf.keras.Model):
+    def __init__(self, num_classes=21,
+                 cls_loss_weight=3,
+                 reg_loss_weight=1,
+                 roi_training_pos_iou_threshold=0.5,
+                 roi_training_neg_iou_threshold=0.1,
+                 roi_training_total_num_samples=128,
+                 roi_training_max_pos_samples=32
+                 ):
+        super().__init__(self)
+
+        self._cls_loss_weight = cls_loss_weight
+        self._reg_loss_weight = reg_loss_weight
+        self._num_classes = num_classes
+
+        self._roi_training_proposal = RoiTrainingProposal(
+             pos_iou_threshold=roi_training_pos_iou_threshold,
+             neg_iou_threshold=roi_training_neg_iou_threshold,
+             total_num_samples=roi_training_total_num_samples,
+             max_pos_samples=roi_training_max_pos_samples,
+        )
+
+    def call(self, inputs, training=None, mask=None):
+        """
+        获取 ROI 训练网络损失函数值
+        :param inputs:
+        :param training:
+        :param mask:
+        :return:
+        """
+
+        image_shape, rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth, gt_bboxes, gt_labels = inputs
+
+        # 获取 roi 的训练数据
+        # 不参与训练
+        roi_training_idx, roi_training_labels, roi_training_gt_bbox_idx = self._roi_training_proposal(
+            (rpn_proposals_bboxes, gt_bboxes, image_shape), training, mask)
+
+        # cal roi cls loss
+        roi_training_score = tf.gather(roi_score, roi_training_idx)
+        roi_cls_loss = cls_loss(logits=roi_training_score,
+                                labels=tf.gather(gt_labels, roi_training_gt_bbox_idx) * roi_training_labels,
+                                weight=self._cls_loss_weight)
+
+        # cal roi bbox reg loss
+        # inputs: roi_training_idx, roi_training_labels, roi_training_gt_bbox_idx,
+        #         roi_predicting_bboxes, rpn_proposals_bboxes, gt_bboxes
+        # 只计算正例的损失函数
+        bboxes_txtytwth_pred = tf.reshape(tf.gather(roi_bboxes_txtytwth, roi_training_idx),
+                                          [-1, self._num_classes, 4])  # [num_rois, num_classes, 4]
+        cur_pred_cls_id = tf.expand_dims(tf.argmax(roi_training_score, axis=1, output_type=tf.int32),
+                                         axis=-1)  # [num_rois, 1]
+        bboxes_txtytwth_pred = tf.squeeze(tf.batch_gather(bboxes_txtytwth_pred, cur_pred_cls_id),
+                                          axis=1)  # [num_rois, 4]
+
+        selected_rpn_proposal_bboxes = tf.gather(rpn_proposals_bboxes, roi_training_idx)
+        selected_gt_bboxes = tf.gather(gt_bboxes, roi_training_gt_bbox_idx)
+        bboxes_txtytwth_gt = encode_bbox(selected_rpn_proposal_bboxes.numpy(),
+                                         selected_gt_bboxes.numpy())
+        roi_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
+                                      inside_weights=roi_training_labels,
+                                      outside_weights=self._reg_loss_weight)
+
+        return roi_cls_loss, roi_reg_loss
+
+
+class FasterRcnnTrainingModel(tf.keras.Model):
+    def __init__(self, rpn_training_model, roi_training_model):
+        super().__init__()
         self._rpn_training_model = rpn_training_model
         self._roi_training_model = roi_training_model
 
     def call(self, inputs, training=None, mask=None):
-        image, gt_bboxes, gt_labels = inputs
-        shared_features, anchors, rpn_score, rpn_bboxes_txtytwth = self._base_model(image, training, mask)
-        rpn_cls_loss, rpn_reg_loss = self._rpn_training_model((anchors, rpn_score, rpn_bboxes_txtytwth, gt_bboxes),
-                                                              training, mask)
-        roi_cls_loss, roi_reg_loss = self._roi_training_model((shared_features, anchors,
-                                                              rpn_score, rpn_bboxes_txtytwth,
-                                                              gt_bboxes, gt_labels), training, mask)
+        gt_bboxes, gt_labels, image_shape, anchors, rpn_score, rpn_bboxes_txtytwth, rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth = inputs
+        gt_bboxes = tf.squeeze(gt_bboxes, axis=0)
+        gt_labels = tf.to_int32(tf.squeeze(gt_labels, axis=0))
+
+        # Rpn Loss
+        rpn_cls_loss, rpn_reg_loss = self._rpn_training_model((image_shape, anchors,
+                                                               rpn_score, rpn_bboxes_txtytwth,
+                                                               gt_bboxes), training, mask)
+
+        # Roi Loss
+        roi_cls_loss, roi_reg_loss = self._roi_training_model((image_shape, rpn_proposals_bboxes,
+                                                               roi_score, roi_bboxes_txtytwth,
+                                                               gt_bboxes, gt_labels), training, mask)
+
         return rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss
 
 
 class FasterRcnnPredictModel(tf.keras.Model):
     def __init__(self,
-                 base_model,
-                 num_classes,
-                 max_num_per_class,
-                 max_num_per_image,
-                 nms_iou_threshold=0.7, ):
+                 num_classes=21,
+                 max_num_per_class=5,
+                 max_num_per_image=5,
+                 nms_iou_threshold=0.5, ):
         super().__init__()
-        self._base_model = base_model
-
-        self._nms_iou_threshold = nms_iou_threshold
         self._num_classes = num_classes
-        self._max_num_per_image = max_num_per_image
         self._max_num_per_class = max_num_per_class
+        self._max_num_per_image = max_num_per_image
+        self._nms_iou_threshold = nms_iou_threshold
 
     def call(self, inputs, training=None, mask=None):
-        image, gt_bboxes, gt_labels = inputs
+        """
+        获取预测结果
+        :param inputs:
+        :param training:
+        :param mask:
+        :return:
+        """
+        rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth = inputs
 
-        # base model
-        shared_features, anchors, rpn_score, rpn_bboxes_txtytwth = self._base_model(image, training, mask)
-
-        # Rpn Proposal
-        rpn_proposals_bboxes, rpn_proposals_score = self._rpn_proposal((rpn_bboxes_txtytwth,
-                                                                        anchors,
-                                                                        rpn_score[:, 1]), training, mask)
-
-        # ROI Pooling
-        roi_features = self._roi_pooling((shared_features, rpn_proposals_bboxes / self._extractor_stride),
-                                         training, mask)
-        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training, mask)
-
-        # get final result
         final_bboxes = decode_bbox(rpn_proposals_bboxes.numpy(), roi_bboxes_txtytwth.numpy())
 
         res_scores = []
         res_bboxes = []
         res_cls = []
         for i in range(self._num_classes):
+            if i == 0:
+                continue
             cur_cls_score = roi_score[:, i]
             cur_idx = tf.image.non_max_suppression(final_bboxes, cur_cls_score,
                                                    self._max_num_per_class,

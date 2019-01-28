@@ -178,8 +178,6 @@ def get_dataset(tf_records_list,
         :param labels_text: 
         :return: 
         """
-        print(height)
-        print(width)
         height = tf.to_float(height[0])
         width = tf.to_float(width[0])
         scale1 = min_size / tf.minimum(height, width)
@@ -227,16 +225,16 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from object_detection.utils.visual_utils import draw_bboxes_with_labels
 
-    for idx, (image, bboxes, labels, labels_text) in enumerate(d):
-        means = [103.939, 116.779, 123.68]
-        image = tf.squeeze(image, axis=0).numpy()
-        image[..., 0] += means[0]
-        image[..., 1] += means[1]
-        image[..., 2] += means[2]
-        image = image[..., ::-1]
-        image = image.astype(np.uint8)
-        image_with_bboxes = draw_bboxes_with_labels(image / 255, tf.squeeze(bboxes, axis=0),
-                                                    tf.squeeze(labels_text, axis=0))
+    for idx, (cur_image, cur_bboxes, cur_labels, cur_labels_text) in enumerate(d):
+        cur_means = [103.939, 116.779, 123.68]
+        cur_image = tf.squeeze(cur_image, axis=0).numpy()
+        cur_image[..., 0] += cur_means[0]
+        cur_image[..., 1] += cur_means[1]
+        cur_image[..., 2] += cur_means[2]
+        cur_image = cur_image[..., ::-1]
+        cur_image = cur_image.astype(np.uint8)
+        image_with_bboxes = draw_bboxes_with_labels(cur_image / 255, tf.squeeze(cur_bboxes, axis=0),
+                                                    tf.squeeze(cur_labels_text, axis=0))
         plt.imshow(image_with_bboxes)
         print(image_with_bboxes.shape)
         plt.show()
