@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from object_detection.model.rpn import RPNHead, RPNTrainingProposal, RPNProposal
 from object_detection.model.roi import RoiTrainingProposal, RoiHead, RoiPooling
 from object_detection.utils.anchors import generate_anchors_np
@@ -15,6 +16,7 @@ class BaseFasterRcnnModel(tf.keras.Model):
                  extractor,
                  extractor_stride,
 
+                 weight_decay=0.0005,
                  rpn_proposal_num_pre_nms_train=12000,
                  rpn_proposal_num_post_nms_train=2000,
                  rpn_proposal_num_pre_nms_test=6000,
@@ -28,24 +30,27 @@ class BaseFasterRcnnModel(tf.keras.Model):
                  ):
         super().__init__()
 
+        self._weight_decay = weight_decay
         self._extractor = extractor
         self._extractor_stride = extractor_stride
 
-        self._rpn_head = RPNHead(len(ratios) * len(scales))
+        self._rpn_head = RPNHead(len(ratios) * len(scales),
+                                 weight_decay=weight_decay)
 
         self._ratios = ratios
         self._scales = scales
 
         self._rpn_proposal = RPNProposal(
-             num_pre_nms_train=rpn_proposal_num_pre_nms_train,
-             num_post_nms_train=rpn_proposal_num_post_nms_train,
-             num_pre_nms_test=rpn_proposal_num_pre_nms_test,
-             num_post_nms_test=rpn_proposal_num_post_nms_test,
-             nms_iou_threshold=rpn_proposal_nms_iou_threshold,
+            num_pre_nms_train=rpn_proposal_num_pre_nms_train,
+            num_post_nms_train=rpn_proposal_num_post_nms_train,
+            num_pre_nms_test=rpn_proposal_num_pre_nms_test,
+            num_post_nms_test=rpn_proposal_num_post_nms_test,
+            nms_iou_threshold=rpn_proposal_nms_iou_threshold,
         )
         self._roi_pooling = RoiPooling(roi_pool_size)
         self._roi_head = RoiHead(num_classes=num_classes,
-                                 keep_rate=roi_head_keep_dropout_rate)
+                                 keep_rate=roi_head_keep_dropout_rate,
+                                 weight_decay=weight_decay)
 
     def call(self, inputs, training=None, mask=None):
         """
@@ -104,16 +109,16 @@ class RpnTrainingModel(tf.keras.Model):
                  rpn_training_pos_iou_threshold=0.7,
                  rpn_training_neg_iou_threshold=0.3,
                  rpn_training_total_num_samples=256,
-                 rpn_training_max_pos_samples=128,):
+                 rpn_training_max_pos_samples=128, ):
         super().__init__()
 
         self._cls_loss_weight = cls_loss_weight
         self._reg_loss_weight = reg_loss_weight
         self._rpn_training_proposal = RPNTrainingProposal(
-             pos_iou_threshold=rpn_training_pos_iou_threshold,
-             neg_iou_threshold=rpn_training_neg_iou_threshold,
-             total_num_samples=rpn_training_total_num_samples,
-             max_pos_samples=rpn_training_max_pos_samples,
+            pos_iou_threshold=rpn_training_pos_iou_threshold,
+            neg_iou_threshold=rpn_training_neg_iou_threshold,
+            total_num_samples=rpn_training_total_num_samples,
+            max_pos_samples=rpn_training_max_pos_samples,
         )
 
     def call(self, inputs, training=None, mask=None):
@@ -173,10 +178,10 @@ class RoiTrainingModel(tf.keras.Model):
         self._num_classes = num_classes
 
         self._roi_training_proposal = RoiTrainingProposal(
-             pos_iou_threshold=roi_training_pos_iou_threshold,
-             neg_iou_threshold=roi_training_neg_iou_threshold,
-             total_num_samples=roi_training_total_num_samples,
-             max_pos_samples=roi_training_max_pos_samples,
+            pos_iou_threshold=roi_training_pos_iou_threshold,
+            neg_iou_threshold=roi_training_neg_iou_threshold,
+            total_num_samples=roi_training_total_num_samples,
+            max_pos_samples=roi_training_max_pos_samples,
         )
 
     def call(self, inputs, training=None, mask=None):
@@ -216,6 +221,13 @@ class RoiTrainingModel(tf.keras.Model):
         selected_gt_bboxes = tf.gather(gt_bboxes, roi_training_gt_bbox_idx)
         bboxes_txtytwth_gt = encode_bbox(selected_rpn_proposal_bboxes.numpy(),
                                          selected_gt_bboxes.numpy())
+
+        # TODO 对结果标准化，不知道为啥
+        loc_normalize_mean = (0., 0., 0., 0.),
+        loc_normalize_std = (0.1, 0.1, 0.2, 0.2)
+        bboxes_txtytwth_gt = ((bboxes_txtytwth_gt - np.array(loc_normalize_mean, np.float32)
+                               ) / np.array(loc_normalize_std, np.float32))
+
         roi_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
                                       inside_weights=roi_training_labels,
                                       outside_weights=self._reg_loss_weight)
@@ -247,47 +259,34 @@ class FasterRcnnTrainingModel(tf.keras.Model):
         return rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss
 
 
-class FasterRcnnPredictModel(tf.keras.Model):
-    def __init__(self,
-                 num_classes=21,
-                 max_num_per_class=5,
-                 max_num_per_image=5,
-                 nms_iou_threshold=0.5, ):
-        super().__init__()
-        self._num_classes = num_classes
-        self._max_num_per_class = max_num_per_class
-        self._max_num_per_image = max_num_per_image
-        self._nms_iou_threshold = nms_iou_threshold
+def post_ops_prediction(inputs,
+                        num_classes=21,
+                        max_num_per_class=5,
+                        max_num_per_image=5,
+                        nms_iou_threshold=0.5,
+                        ):
+    rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth = inputs
+    final_bboxes = decode_bbox(rpn_proposals_bboxes.numpy(), roi_bboxes_txtytwth.numpy())
+    # TODO 修正 final bboxes 的边界
 
-    def call(self, inputs, training=None, mask=None):
-        """
-        获取预测结果
-        :param inputs:
-        :param training:
-        :param mask:
-        :return:
-        """
-        rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth = inputs
+    res_scores = []
+    res_bboxes = []
+    res_cls = []
+    for i in range(num_classes):
+        if i == 0:
+            continue
+        cur_cls_score = roi_score[:, i]
+        cur_idx = tf.image.non_max_suppression(final_bboxes, cur_cls_score,
+                                               max_num_per_class,
+                                               nms_iou_threshold)
+        res_scores.append(tf.gather(cur_cls_score, cur_idx))
+        res_bboxes.append(tf.gather(final_bboxes, cur_idx))
+        res_cls.append(tf.ones_like(cur_idx, dtype=tf.int32) * i)
 
-        final_bboxes = decode_bbox(rpn_proposals_bboxes.numpy(), roi_bboxes_txtytwth.numpy())
+    scores_after_nms = tf.concat(res_scores, axis=0)
+    bboxes_after_nms = tf.concat(res_bboxes, axis=0)
+    cls_after_nms = tf.concat(res_cls, axis=0)
 
-        res_scores = []
-        res_bboxes = []
-        res_cls = []
-        for i in range(self._num_classes):
-            if i == 0:
-                continue
-            cur_cls_score = roi_score[:, i]
-            cur_idx = tf.image.non_max_suppression(final_bboxes, cur_cls_score,
-                                                   self._max_num_per_class,
-                                                   self._nms_iou_threshold)
-            res_scores.append(tf.gather(cur_cls_score, cur_idx))
-            res_bboxes.append(tf.gather(final_bboxes, cur_idx))
-            res_cls.append(tf.ones_like(cur_idx, dtype=tf.int32) * i)
-
-        scores_after_nms = tf.concat(res_scores, axis=0)
-        bboxes_after_nms = tf.concat(res_bboxes, axis=0)
-        cls_after_nms = tf.concat(res_cls, axis=0)
-
-        _, final_idx = tf.nn.top_k(scores_after_nms, k=self._max_num_per_image, sorted=False)
-        return tf.gather(bboxes_after_nms, final_idx), tf.gather(cls_after_nms, final_idx)
+    _, final_idx = tf.nn.top_k(scores_after_nms, k=max_num_per_image, sorted=False)
+    return tf.gather(bboxes_after_nms, final_idx), tf.gather(cls_after_nms, final_idx), tf.gather(scores_after_nms,
+                                                                                                  final_idx)

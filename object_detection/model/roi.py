@@ -31,8 +31,6 @@ class RoiPooling(tf.keras.Model):
             xmin = tf.to_int32(roi[1])
             ymax = tf.to_int32(roi[2])
             xmax = tf.to_int32(roi[3])
-            # print(ymin.numpy(), xmin.numpy(), ymax.numpy(), xmax.numpy())
-            # print(ymin.numpy()*16, xmin.numpy()*16, ymax.numpy()*16, xmax.numpy()*16)
             res.append(
                 tf.image.resize_bilinear(shared_layers[:, ymin:ymax + 1, xmin:xmax + 1, :],
                                          [self._pool_size, self._pool_size]))
@@ -41,18 +39,21 @@ class RoiPooling(tf.keras.Model):
 
 
 class RoiHead(tf.keras.Model):
-    def __init__(self, num_classes, keep_rate=0.5):
+    def __init__(self, num_classes, keep_rate=0.5, weight_decay=0.0005):
         super().__init__()
         self._num_classes = num_classes
 
-        # TODO: Dense 层的细节
-        self._fc1 = layers.Dense(4096, activation=tf.nn.relu)
+        self._fc1 = layers.Dense(4096, activation=tf.nn.relu, name='roi_head_fc1',
+                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
         self._dropout1 = layers.Dropout(rate=1 - keep_rate)
-        self._fc2 = layers.Dense(4096, activation=tf.nn.relu)
+        self._fc2 = layers.Dense(4096, activation=tf.nn.relu, name='roi_head_fc2',
+                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
         self._dropout2 = layers.Dropout(rate=1 - keep_rate)
 
-        self._score_prediction = layers.Dense(num_classes, activation=tf.nn.softmax)
-        self._bbox_prediction = layers.Dense(4 * num_classes)
+        self._score_prediction = layers.Dense(num_classes, activation=tf.nn.softmax, name='roi_head_score',
+                                              kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        self._bbox_prediction = layers.Dense(4 * num_classes, name='roi_head_bboxes',
+                                             kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
 
     def call(self, inputs, training=None, mask=None):
         """
@@ -123,11 +124,11 @@ class RoiTrainingProposal(tf.keras.Model):
         # 根据要求，修正正反例数量
         cur_pos_num = tf.minimum(total_pos_num, self._max_pos_samples)
         cur_neg_num = tf.minimum(self._total_num_samples - cur_pos_num, total_neg_num)
-        print('roi training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
+        # print('roi training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
 
         # 随机选择正例和反例
-        _, total_pos_index = tf.nn.top_k(max_scores, total_pos_num, sorted=False)
-        _, total_neg_index = tf.nn.top_k(-max_scores, total_neg_num, sorted=False)
+        total_pos_index = tf.squeeze(tf.where(tf.equal(labels, 1)), axis=1)
+        total_neg_index = tf.squeeze(tf.where(tf.equal(labels, 0)), axis=1)
         pos_index = tf.gather(total_pos_index, tf.random_shuffle(tf.range(0, total_pos_num))[:cur_pos_num])
         neg_index = tf.gather(total_neg_index, tf.random_shuffle(tf.range(0, total_neg_num))[:cur_neg_num])
 

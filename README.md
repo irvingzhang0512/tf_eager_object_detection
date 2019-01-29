@@ -50,11 +50,13 @@
 
 ## 2. TODO
 + [x]  use different preprocessing utils for different feature extractor.
++ [x]  remove all magic number and use config dict to cover all params in faster rcnn.
++ [x] add l2 regularize loss.
 + [ ] compare current net with the original faster rcnn model.
-+ [ ]  remove all magic number and use config dict to cover all params in faster rcnn.
 + [ ]  add summaries in training procedure.
 + [ ]  add model load/save functions.
 + [ ]  predict and visual scripts.
++ [ ] use `logging` instead of `print`.
 
 
 ## 3. 存在的问题

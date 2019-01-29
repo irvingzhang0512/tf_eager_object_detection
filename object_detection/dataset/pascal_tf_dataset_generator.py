@@ -169,7 +169,7 @@ def get_dataset(tf_records_list,
     def _map_after_batch(image, bboxes, height, width, labels, labels_text):
         """
         rescale image
-        1) 短边最短为600，长边最长为2000，矛盾时，有限满足长边2000
+        1) 短边最短为600，长边最长为2000，矛盾时，优先满足长边2000
         2) 输入数据bboxes，本来是[0, 1]， 转换为像素值
         3) 通过 preprocessing_type 选择 preprocessing 函数
         :param image: 
