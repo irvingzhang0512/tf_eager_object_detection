@@ -9,7 +9,7 @@ __all__ = ['get_dataset']
 
 def _get_default_iaa_sequence():
     return [
-        iaa.Flipud(0.5),
+        # iaa.Flipud(0.5),
         iaa.Fliplr(0.5),
     ]
 

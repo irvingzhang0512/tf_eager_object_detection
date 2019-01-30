@@ -20,22 +20,22 @@ class Vgg16Extractor(tf.keras.Model):
         x = layers.Conv2D(64, (3, 3),
                           activation='relu',
                           padding='same',
-                          name='block1_conv1')(img_input)
+                          name='block1_conv1', trainable=False)(img_input)
         x = layers.Conv2D(64, (3, 3),
                           activation='relu',
                           padding='same',
-                          name='block1_conv2')(x)
+                          name='block1_conv2', trainable=False)(x)
         x = layers.MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool')(x)
 
         # Block 2
         x = layers.Conv2D(128, (3, 3),
                           activation='relu',
                           padding='same',
-                          name='block2_conv1')(x)
+                          name='block2_conv1', trainable=False)(x)
         x = layers.Conv2D(128, (3, 3),
                           activation='relu',
                           padding='same',
-                          name='block2_conv2')(x)
+                          name='block2_conv2', trainable=False)(x)
         x = layers.MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool')(x)
 
         # Block 3

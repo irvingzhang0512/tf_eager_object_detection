@@ -49,17 +49,17 @@
     + `losses.py`: cal class loss & reg loss for rpn training and roi training.
 
 ## 2. TODO
-+ [x]  use different preprocessing utils for different feature extractor.
-+ [x]  remove all magic number and use config dict to cover all params in faster rcnn.
++ [x] use different preprocessing utils for different feature extractor.
++ [x] remove all magic number and use config dict to cover all params in faster rcnn.
 + [x] add l2 regularize loss.
 + [ ] compare current net with the original faster rcnn model.
-+ [ ]  add summaries in training procedure.
-+ [ ]  add model load/save functions.
-+ [ ]  predict and visual scripts.
++ [ ] add summaries in training procedure.
++ [ ] add model load/save functions.
++ [ ] predict and visual scripts.
 + [ ] use `logging` instead of `print`.
++ [ ] alternative training.
 
 
 ## 3. 存在的问题
-+ numpy 操作和 tensorflow 操作混杂，导致中间部分梯度传递有问题，需要仔细研究。
-+ 看文章中说，roi proposal 的结果需要标准化。
+
 

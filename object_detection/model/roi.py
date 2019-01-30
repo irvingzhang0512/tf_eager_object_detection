@@ -43,16 +43,22 @@ class RoiHead(tf.keras.Model):
         super().__init__()
         self._num_classes = num_classes
 
-        self._fc1 = layers.Dense(4096, activation=tf.nn.relu, name='roi_head_fc1',
+        self._fc1 = layers.Dense(4096, name='roi_head_fc1',
+                                 kernel_initializer='he_normal',
                                  kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        self._bn1 = layers.BatchNormalization()
         self._dropout1 = layers.Dropout(rate=1 - keep_rate)
-        self._fc2 = layers.Dense(4096, activation=tf.nn.relu, name='roi_head_fc2',
+        self._fc2 = layers.Dense(4096, name='roi_head_fc2',
+                                 kernel_initializer='he_normal',
                                  kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        self._bn2 = layers.BatchNormalization()
         self._dropout2 = layers.Dropout(rate=1 - keep_rate)
 
         self._score_prediction = layers.Dense(num_classes, activation=tf.nn.softmax, name='roi_head_score',
+                                              kernel_initializer='he_normal',
                                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
         self._bbox_prediction = layers.Dense(4 * num_classes, name='roi_head_bboxes',
+                                             kernel_initializer='he_normal',
                                              kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
 
     def call(self, inputs, training=None, mask=None):
@@ -66,7 +72,9 @@ class RoiHead(tf.keras.Model):
         """
         net = self._fc1(inputs)
         net = self._dropout1(net, training)
+        net = tf.nn.relu(self._bn1(net, training))
         net = self._fc2(net)
+        net = tf.nn.relu(self._bn2(net, training))
         net = self._dropout2(net, training)
         roi_score = self._score_prediction(net)
         roi_bboxes_txtytwth = self._bbox_prediction(net)
@@ -136,4 +144,5 @@ class RoiTrainingProposal(tf.keras.Model):
         selected_idx = tf.concat([pos_index, neg_index], axis=0)
         return tf.stop_gradient(selected_idx), \
                tf.stop_gradient(tf.gather(labels, selected_idx)), \
-               tf.stop_gradient(tf.gather(gt_bbox_idx, selected_idx))
+               tf.stop_gradient(tf.gather(gt_bbox_idx, selected_idx)), \
+               tf.stop_gradient(cur_pos_num)

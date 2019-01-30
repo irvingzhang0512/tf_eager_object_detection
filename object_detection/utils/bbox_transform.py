@@ -1,4 +1,78 @@
 import numpy as np
+import tensorflow as tf
+
+
+def encode_bbox_with_mean_and_std(src_bbox, dst_bbox, target_means, target_stds):
+    """Compute refinement needed to transform box to gt_box.
+
+    Args
+    ---
+        src_bbox: [..., (y1, x1, y2, x2)]
+        dst_bbox: [..., (y1, x1, y2, x2)]
+        target_means: [4]
+        target_stds: [4]
+    """
+    target_means = tf.constant(target_means, dtype=tf.float32)
+    target_stds = tf.constant(target_stds, dtype=tf.float32)
+
+    box = tf.cast(src_bbox, tf.float32)
+    gt_box = tf.cast(dst_bbox, tf.float32)
+
+    height = box[..., 2] - box[..., 0]
+    width = box[..., 3] - box[..., 1]
+    center_y = box[..., 0] + 0.5 * height
+    center_x = box[..., 1] + 0.5 * width
+
+    gt_height = gt_box[..., 2] - gt_box[..., 0]
+    gt_width = gt_box[..., 3] - gt_box[..., 1]
+    gt_center_y = gt_box[..., 0] + 0.5 * gt_height
+    gt_center_x = gt_box[..., 1] + 0.5 * gt_width
+
+    dy = (gt_center_y - center_y) / height
+    dx = (gt_center_x - center_x) / width
+    dh = tf.log(gt_height / height)
+    dw = tf.log(gt_width / width)
+
+    delta = tf.stack([dy, dx, dh, dw], axis=-1)
+    delta = (delta - target_means) / target_stds
+
+    return delta
+
+
+def decode_bbox_with_mean_and_std(anchors, bboxes_txtytwth, target_means, target_stds):
+    """Compute bounding box based on roi and delta.
+
+    Args
+    ---
+        anchors: [N, (y1, x1, y2, x2)] box to update
+        bboxes_txtytwth: [N, (dy, dx, log(dh), log(dw))] refinements to apply
+        target_means: [4]
+        target_stds: [4]
+    """
+    target_means = tf.constant(
+        target_means, dtype=tf.float32)
+    target_stds = tf.constant(
+        target_stds, dtype=tf.float32)
+    delta = bboxes_txtytwth * target_stds + target_means
+    # Convert to y, x, h, w
+    height = anchors[:, 2] - anchors[:, 0]
+    width = anchors[:, 3] - anchors[:, 1]
+    center_y = anchors[:, 0] + 0.5 * height
+    center_x = anchors[:, 1] + 0.5 * width
+
+    # Apply delta
+    center_y += delta[:, 0] * height
+    center_x += delta[:, 1] * width
+    height *= tf.exp(delta[:, 2])
+    width *= tf.exp(delta[:, 3])
+
+    # Convert back to y1, x1, y2, x2
+    y1 = center_y - 0.5 * height
+    x1 = center_x - 0.5 * width
+    y2 = y1 + height
+    x2 = x1 + width
+    result = tf.stack([y1, x1, y2, x2], axis=1)
+    return result
 
 
 def encode_bbox(src_bbox, dst_bbox):

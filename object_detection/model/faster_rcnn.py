@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from object_detection.model.rpn import RPNHead, RPNTrainingProposal, RPNProposal
+from object_detection.model.rpn import RPNHead, RPNTrainingProposal, RPNProposal, proposal_filter
 from object_detection.model.roi import RoiTrainingProposal, RoiHead, RoiPooling
 from object_detection.utils.anchors import generate_anchors_np
 from object_detection.utils.bbox_transform import decode_bbox, encode_bbox
@@ -79,10 +79,8 @@ class BaseFasterRcnnModel(tf.keras.Model):
         shared_features = self._extractor(inputs, training, mask)
 
         # 2）获取 RPN 初步预测结果；
-        # shape [1, num_anchors*feature_width*feature_height, 2], [1, num_anchors*feature_width*feature_height, 4]
+        # shape [num_anchors*feature_width*feature_height, 2], [num_anchors*feature_width*feature_height, 4]
         rpn_score, rpn_bboxes_txtytwth = self._rpn_head(shared_features, training, mask)
-        rpn_score = tf.squeeze(rpn_score, axis=0)
-        rpn_bboxes_txtytwth = tf.squeeze(rpn_bboxes_txtytwth, axis=0)
 
         # 3）获取 Anchors；
         anchors = generate_anchors_np(self._scales, self._ratios,
@@ -132,11 +130,12 @@ class RpnTrainingModel(tf.keras.Model):
         image_shape, anchors, rpn_score, rpn_bboxes_txtytwth, gt_bboxes = inputs
 
         # 获取 rpn 的训练数据
-        rpn_training_idx, rpn_training_labels, rpn_training_gt_bbox_idx = self._rpn_training_proposal((anchors,
-                                                                                                       gt_bboxes,
-                                                                                                       image_shape),
-                                                                                                      training,
-                                                                                                      mask)
+        rpn_training_idx, rpn_training_labels, rpn_training_gt_bbox_idx, pos_sample_number = self._rpn_training_proposal(
+            (anchors,
+             gt_bboxes,
+             image_shape),
+            training,
+            mask)
 
         # inputs: rpn_training_idx, rpn_training_labels & rpn_score
         rpn_training_score = tf.gather(rpn_score, rpn_training_idx)
@@ -149,15 +148,21 @@ class RpnTrainingModel(tf.keras.Model):
         # 3. 通过 rpn_training_idx, rpn_training_labels 可设置 loss 的weight，即只计算正例的回归损失函数。
         # 4. 通过1中的预测结果以及2中的真实结果，结合3中的损失函数权重，计算smooth L1损失函数。
         # 计算损失函数中的 label，可以使用Numpy
-        selected_anchors = tf.gather(anchors, rpn_training_idx)
-        selected_gt_bboxes = tf.gather(gt_bboxes, rpn_training_gt_bbox_idx)
-        bboxes_txtytwth_gt = encode_bbox(selected_anchors.numpy(), selected_gt_bboxes.numpy())
-        # 计算损失函数中的logits，不能使用numpy
-        bboxes_txtytwth_pred = tf.gather(rpn_bboxes_txtytwth, rpn_training_idx)
+        if pos_sample_number == 0:
+            rpn_reg_loss = 0
+        else:
+            rpn_training_idx = rpn_training_idx[:pos_sample_number]  # [num_pos, ]
+            rpn_training_gt_bbox_idx = rpn_training_gt_bbox_idx[:pos_sample_number]  # [num_pos, ]
+            selected_anchors = tf.gather(anchors, rpn_training_idx)  # [num_pos, 4]
+            selected_gt_bboxes = tf.gather(gt_bboxes, rpn_training_gt_bbox_idx)  # [num_pos, 4]
+            bboxes_txtytwth_gt = encode_bbox(selected_anchors.numpy(), selected_gt_bboxes.numpy())  # [num_pos, 4]
+            # 计算损失函数中的logits，不能使用numpy
+            bboxes_txtytwth_pred = tf.gather(rpn_bboxes_txtytwth, rpn_training_idx)  # [num_pos, 4]
 
-        rpn_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
-                                      inside_weights=rpn_training_labels,
-                                      outside_weights=self._reg_loss_weight, )
+            # print(bboxes_txtytwth_gt)
+            # print(bboxes_txtytwth_pred)
+            rpn_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
+                                          outside_weights=self._reg_loss_weight, )
 
         return rpn_cls_loss, rpn_reg_loss
 
@@ -197,7 +202,7 @@ class RoiTrainingModel(tf.keras.Model):
 
         # 获取 roi 的训练数据
         # 不参与训练
-        roi_training_idx, roi_training_labels, roi_training_gt_bbox_idx = self._roi_training_proposal(
+        roi_training_idx, roi_training_labels, roi_training_gt_bbox_idx, pos_sample_num = self._roi_training_proposal(
             (rpn_proposals_bboxes, gt_bboxes, image_shape), training, mask)
 
         # cal roi cls loss
@@ -210,27 +215,26 @@ class RoiTrainingModel(tf.keras.Model):
         # inputs: roi_training_idx, roi_training_labels, roi_training_gt_bbox_idx,
         #         roi_predicting_bboxes, rpn_proposals_bboxes, gt_bboxes
         # 只计算正例的损失函数
-        bboxes_txtytwth_pred = tf.reshape(tf.gather(roi_bboxes_txtytwth, roi_training_idx),
-                                          [-1, self._num_classes, 4])  # [num_rois, num_classes, 4]
-        cur_pred_cls_id = tf.expand_dims(tf.argmax(roi_training_score, axis=1, output_type=tf.int32),
-                                         axis=-1)  # [num_rois, 1]
-        bboxes_txtytwth_pred = tf.squeeze(tf.batch_gather(bboxes_txtytwth_pred, cur_pred_cls_id),
-                                          axis=1)  # [num_rois, 4]
+        if pos_sample_num == 0:
+            roi_reg_loss = 0
+        else:
+            roi_training_idx = roi_training_idx[:pos_sample_num]  # [num_pos, ]
+            roi_training_gt_bbox_idx = tf.to_int32(roi_training_gt_bbox_idx[:pos_sample_num])  # [num_pos, ]
+            bboxes_txtytwth_pred = tf.reshape(tf.gather(roi_bboxes_txtytwth, roi_training_idx),
+                                              [-1, self._num_classes, 4])  # [num_pos, num_classes, 4]
 
-        selected_rpn_proposal_bboxes = tf.gather(rpn_proposals_bboxes, roi_training_idx)
-        selected_gt_bboxes = tf.gather(gt_bboxes, roi_training_gt_bbox_idx)
-        bboxes_txtytwth_gt = encode_bbox(selected_rpn_proposal_bboxes.numpy(),
-                                         selected_gt_bboxes.numpy())
+            # [num_pos, num_classes, 4]  [num_pos, 1]
+            bboxes_txtytwth_pred = tf.squeeze(tf.batch_gather(bboxes_txtytwth_pred,
+                                                              tf.expand_dims(roi_training_gt_bbox_idx, axis=-1)),
+                                              axis=1)  # [num_pos, 4]
 
-        # TODO 对结果标准化，不知道为啥
-        loc_normalize_mean = (0., 0., 0., 0.),
-        loc_normalize_std = (0.1, 0.1, 0.2, 0.2)
-        bboxes_txtytwth_gt = ((bboxes_txtytwth_gt - np.array(loc_normalize_mean, np.float32)
-                               ) / np.array(loc_normalize_std, np.float32))
+            selected_rpn_proposal_bboxes = tf.gather(rpn_proposals_bboxes, roi_training_idx)
+            selected_gt_bboxes = tf.gather(gt_bboxes, roi_training_gt_bbox_idx)
+            bboxes_txtytwth_gt = encode_bbox(selected_rpn_proposal_bboxes.numpy(),
+                                             selected_gt_bboxes.numpy())
 
-        roi_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
-                                      inside_weights=roi_training_labels,
-                                      outside_weights=self._reg_loss_weight)
+            roi_reg_loss = smooth_l1_loss(bboxes_txtytwth_pred, bboxes_txtytwth_gt,
+                                          outside_weights=self._reg_loss_weight)
 
         return roi_cls_loss, roi_reg_loss
 
@@ -265,9 +269,9 @@ def post_ops_prediction(inputs,
                         max_num_per_image=5,
                         nms_iou_threshold=0.5,
                         ):
-    rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth = inputs
+    rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth, image_shape = inputs
     final_bboxes = decode_bbox(rpn_proposals_bboxes.numpy(), roi_bboxes_txtytwth.numpy())
-    # TODO 修正 final bboxes 的边界
+    final_bboxes, _ = proposal_filter(final_bboxes, 0, image_shape[0], image_shape[1], 16)
 
     res_scores = []
     res_bboxes = []
