@@ -1,13 +1,12 @@
 import tensorflow as tf
 from object_detection.model.feature_extractor import Vgg16Extractor
+from object_detection.model.extractor.resnet import ResNetExtractor
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset
 from object_detection.model.faster_rcnn import BaseFasterRcnnModel, FasterRcnnTrainingModel, RpnTrainingModel, \
     RoiTrainingModel, post_ops_prediction
 from object_detection.config.faster_rcnn_config import CONFIG
 from object_detection.utils.pascal_voc_map_utils import eval_detection_voc
-import tensorflow.contrib.eager as tfe
 import time
-from tensorflow.contrib.summary import summary as eager_summary
 
 tf.enable_eager_execution()
 
@@ -25,7 +24,47 @@ def train_step(model, loss, tape, optimizer):
     apply_gradients(model, optimizer, compute_gradients(model, loss, tape))
 
 
-def _get_default_base_model():
+def _get_resnet101_faster_rcnn_model():
+    base_model = BaseFasterRcnnModel(
+        ratios=CONFIG['ratios'],
+        scales=CONFIG['scales'],
+        extractor=ResNetExtractor(101),
+        extractor_stride=CONFIG['extractor_stride'],
+
+        weight_decay=CONFIG['weight_decay'],
+        rpn_proposal_num_pre_nms_train=CONFIG['rpn_proposal_train_pre_nms_sample_number'],
+        rpn_proposal_num_post_nms_train=CONFIG['rpn_proposal_train_after_nms_sample_number'],
+        rpn_proposal_num_pre_nms_test=CONFIG['rpn_proposal_test_pre_nms_sample_number'],
+        rpn_proposal_num_post_nms_test=CONFIG['rpn_proposal_test_after_nms_sample_number'],
+        rpn_proposal_nms_iou_threshold=CONFIG['rpn_proposal_nms_iou_threshold'],
+
+        roi_pool_size=CONFIG['roi_pooling_size'],
+        num_classes=CONFIG['num_classes'],
+        roi_head_keep_dropout_rate=CONFIG['roi_head_keep_dropout_rate'],
+    )
+    training_model = FasterRcnnTrainingModel(
+        rpn_training_model=RpnTrainingModel(
+            cls_loss_weight=CONFIG['rpn_cls_loss_weight'],
+            reg_loss_weight=CONFIG['rpn_reg_loss_weight'],
+            rpn_training_pos_iou_threshold=CONFIG['rpn_pos_iou_threshold'],
+            rpn_training_neg_iou_threshold=CONFIG['rpn_neg_iou_threshold'],
+            rpn_training_total_num_samples=CONFIG['rpn_total_sample_number'],
+            rpn_training_max_pos_samples=CONFIG['rpn_pos_sample_max_number'],
+        ),
+        roi_training_model=RoiTrainingModel(
+            num_classes=CONFIG['num_classes'],
+            cls_loss_weight=CONFIG['roi_cls_loss_weight'],
+            reg_loss_weight=CONFIG['roi_reg_loss_weight'],
+            roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
+            roi_training_neg_iou_threshold=CONFIG['roi_neg_iou_threshold'],
+            roi_training_total_num_samples=CONFIG['roi_total_sample_number'],
+            roi_training_max_pos_samples=CONFIG['roi_pos_sample_max_number']
+        ),
+    )
+    return base_model, training_model
+
+
+def _get_vgg16_faster_rcnn_model():
     base_model = BaseFasterRcnnModel(
         ratios=CONFIG['ratios'],
         scales=CONFIG['scales'],
@@ -69,17 +108,18 @@ def _get_default_optimizer():
     return tf.train.MomentumOptimizer(CONFIG['learning_rate_start'], momentum=CONFIG['optimizer_momentum'])
 
 
-def _get_training_dataset():
+def _get_training_dataset(preprocessing_type='caffe'):
     tf_records_list = ['/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_00.tfrecords',
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_01.tfrecords',
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_02.tfrecords',
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_03.tfrecords',
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_04.tfrecords', ]
     return get_dataset(tf_records_list,
+                       preprocessing_type=preprocessing_type,
                        min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'])
 
 
-def _get_evaluating_dataset():
+def _get_evaluating_dataset(preprocessing_type='caffe'):
     tf_records_list = ['/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_val_00.tfrecords',
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_val_01.tfrecords',
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_val_02.tfrecords',
@@ -87,6 +127,7 @@ def _get_evaluating_dataset():
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_val_04.tfrecords', ]
     return get_dataset(tf_records_list,
                        min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
+                       preprocessing_type=preprocessing_type,
                        argument=False, )
 
 
@@ -187,8 +228,13 @@ def evaluate(dataset, base_faster_rcnn_model, use_07_metric=False):
 if __name__ == '__main__':
     graph = tf.Graph()
     with graph.as_default():
-        cur_base_model, cur_training_model = _get_default_base_model()
-        cur_training_dataset = _get_training_dataset()
-        cur_evaluation_dataset = _get_evaluating_dataset()
+        # cur_base_model, cur_training_model = _get_vgg16_faster_rcnn_model()
+        # cur_training_dataset = _get_training_dataset('caffe')
+        # cur_evaluation_dataset = _get_evaluating_dataset('caffe')
+
+        cur_base_model, cur_training_model = _get_resnet101_faster_rcnn_model()
+        cur_training_dataset = _get_training_dataset('tf')
+        cur_evaluation_dataset = _get_evaluating_dataset('tf')
+
         cur_optimizer = _get_default_optimizer()
         train(cur_training_dataset, cur_evaluation_dataset, cur_base_model, cur_training_model, cur_optimizer)
