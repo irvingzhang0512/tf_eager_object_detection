@@ -6,6 +6,7 @@ from object_detection.model.faster_rcnn import BaseFasterRcnnModel, FasterRcnnTr
     RoiTrainingModel, post_ops_prediction
 from object_detection.config.faster_rcnn_config import CONFIG
 from object_detection.utils.pascal_voc_map_utils import eval_detection_voc
+from tensorflow.contrib.summary import summary
 import time
 
 tf.enable_eager_execution()
@@ -28,7 +29,7 @@ def _get_resnet101_faster_rcnn_model():
     base_model = BaseFasterRcnnModel(
         ratios=CONFIG['ratios'],
         scales=CONFIG['scales'],
-        extractor=ResNetExtractor(101),
+        extractor=ResNetExtractor(50),
         extractor_stride=CONFIG['extractor_stride'],
 
         weight_decay=CONFIG['weight_decay'],
@@ -114,6 +115,7 @@ def _get_training_dataset(preprocessing_type='caffe'):
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_02.tfrecords',
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_03.tfrecords',
                        '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_04.tfrecords', ]
+    # tf_records_list = ['D:\\data\\VOCdevkit\\tf_eager_records\\pascal_train_00.tfrecords']
     return get_dataset(tf_records_list,
                        preprocessing_type=preprocessing_type,
                        min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'])
@@ -131,7 +133,7 @@ def _get_evaluating_dataset(preprocessing_type='caffe'):
                        argument=False, )
 
 
-def train_one_epoch(dataset, base_model, training_model, optimizer, logs_every_n_steps=1):
+def train_one_epoch(dataset, base_model, training_model, optimizer, saver, logs_every_n_steps=50):
     for idx, (image, gt_bboxes, gt_labels, _) in enumerate(dataset):
         with tf.GradientTape() as tape:
             shape, anchors, rpn_score, rpn_txtytwth, rpn_proposals, roi_score, roi_txtytwth = base_model(image,
@@ -156,35 +158,37 @@ def train_one_epoch(dataset, base_model, training_model, optimizer, logs_every_n
             train_step(base_model, total_loss, tape, optimizer)
         if idx % logs_every_n_steps == 0:
             print('steps %d loss: %.4f, %.4f, %.4f, %.4f, %.4f, %.4f' % (idx + 1,
-                                                                         rpn_cls_loss.numpy(), rpn_reg_loss.numpy(),
-                                                                         roi_cls_loss.numpy(), roi_reg_loss.numpy(),
+                                                                         rpn_cls_loss, rpn_reg_loss,
+                                                                         roi_cls_loss, roi_reg_loss,
                                                                          tf.add_n(base_model.losses), total_loss)
                   )
+        if idx % 1000 == 0:
+            saver.save('E:\\PycharmProjects\\tf_eager_object_detection\\logs\\model.ckpt')
 
 
 def train(training_dataset, evaluating_dataset, base_model, training_model, optimizer,
-          train_dir='./logs', val_dir='./logs/val'):
+          train_dir='E:\\PycharmProjects\\tf_eager_object_detection\\logs',
+          val_dir='E:\\PycharmProjects\\tf_eager_object_detection\\logs\\val'):
     tf.train.get_or_create_global_step()
-    # ckpt = tf.train.Checkpoint(model=base_model)
-    # ckpt.save(file_prefix='./logs/ckpt')
-    # saver = tfe.Saver(base_model.variables)
-    # saver = tf.train.Saver(base_model.variables)
-    # saver.save('./logs/model.ckpt')
-    train_writer = tf.contrib.summary.create_file_writer(train_dir, flush_millis=10000)
+    ckpt = tf.train.Checkpoint(model=base_model)
+    # ckpt.save(file_prefix='E:\\PycharmProjects\\tf_eager_object_detection\\logs\\model.ckpt')
+    # saver = Saver(base_model.variables)
+    # saver.save('E:\\PycharmProjects\\tf_eager_object_detection\\logs\\model.ckpt')
+    train_writer = tf.contrib.summary.create_file_writer(train_dir, flush_millis=100000)
     val_writer = tf.contrib.summary.create_file_writer(val_dir, flush_millis=10000)
 
     for i in range(CONFIG['epochs']):
         print('epoch %d starting...' % (i + 1))
         start = time.time()
-        with train_writer.as_default(), tf.contrib.summary.always_record_summaries():
-            train_one_epoch(training_dataset, base_model, training_model, optimizer)
+        with train_writer.as_default(), summary.record_summaries_every_n_global_steps(50):
+            train_one_epoch(training_dataset, base_model, training_model, optimizer, ckpt)
         train_end = time.time()
         print('epoch %d training finished, costing %d seconds, start evaluating...' % (i + 1, train_end - start))
-        with val_writer.as_default(), tf.contrib.summary.always_record_summaries():
-            res = evaluate(evaluating_dataset, cur_base_model)
-        print('epoch %d evaluating finished, costing %d seconds, current mAP is %.4f' % (i + 1,
-                                                                                         time.time() - train_end,
-                                                                                         res['map']))
+        # with val_writer.as_default(), tf.contrib.summary.always_record_summaries():
+        #     res = evaluate(evaluating_dataset, cur_base_model)
+        # print('epoch %d evaluating finished, costing %d seconds, current mAP is %.4f' % (i + 1,
+        #                                                                                  time.time() - train_end,
+        #                                                                                  res['map']))
 
 
 def evaluate(dataset, base_faster_rcnn_model, use_07_metric=False):
@@ -226,15 +230,13 @@ def evaluate(dataset, base_faster_rcnn_model, use_07_metric=False):
 
 
 if __name__ == '__main__':
-    graph = tf.Graph()
-    with graph.as_default():
-        # cur_base_model, cur_training_model = _get_vgg16_faster_rcnn_model()
-        # cur_training_dataset = _get_training_dataset('caffe')
-        # cur_evaluation_dataset = _get_evaluating_dataset('caffe')
+    # cur_base_model, cur_training_model = _get_vgg16_faster_rcnn_model()
+    # cur_training_dataset = _get_training_dataset('caffe')
+    # cur_evaluation_dataset = _get_evaluating_dataset('caffe')
 
-        cur_base_model, cur_training_model = _get_resnet101_faster_rcnn_model()
-        cur_training_dataset = _get_training_dataset('tf')
-        cur_evaluation_dataset = _get_evaluating_dataset('tf')
+    cur_base_model, cur_training_model = _get_resnet101_faster_rcnn_model()
+    cur_training_dataset = _get_training_dataset('tf')
+    cur_evaluation_dataset = _get_evaluating_dataset('tf')
 
-        cur_optimizer = _get_default_optimizer()
-        train(cur_training_dataset, cur_evaluation_dataset, cur_base_model, cur_training_model, cur_optimizer)
+    cur_optimizer = _get_default_optimizer()
+    train(cur_training_dataset, cur_evaluation_dataset, cur_base_model, cur_training_model, cur_optimizer)

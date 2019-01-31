@@ -43,12 +43,12 @@ class RoiHead(tf.keras.Model):
         super().__init__()
         self._num_classes = num_classes
 
-        self._fc1 = layers.Dense(4096, name='roi_head_fc1',
+        self._fc1 = layers.Dense(1024, name='roi_head_fc1',
                                  kernel_initializer='he_normal',
                                  kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
         self._bn1 = layers.BatchNormalization()
         self._dropout1 = layers.Dropout(rate=1 - keep_rate)
-        self._fc2 = layers.Dense(4096, name='roi_head_fc2',
+        self._fc2 = layers.Dense(1024, name='roi_head_fc2',
                                  kernel_initializer='he_normal',
                                  kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
         self._bn2 = layers.BatchNormalization()

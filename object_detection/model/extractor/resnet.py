@@ -77,8 +77,8 @@ class _Bottleneck(tf.keras.Model):
 
 
 class ResNetExtractor(tf.keras.Model):
-    def __init__(self, depth, **kwargs):
-        super(self).__init__(**kwargs)
+    def __init__(self, depth):
+        super().__init__()
 
         if depth not in [50, 101]:
             raise AssertionError('depth must be 50 or 101.')

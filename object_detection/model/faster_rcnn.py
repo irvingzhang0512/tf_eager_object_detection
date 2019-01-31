@@ -76,7 +76,8 @@ class BaseFasterRcnnModel(tf.keras.Model):
         image_shape = inputs.get_shape().as_list()[1:3]
 
         # 1）输入一张图片，通过 feature_extractor 提取特征；
-        shared_features = self._extractor(inputs, training, mask)
+        shared_features = self._extractor(inputs, training)
+        shared_feature_shape = shared_features.get_shape().as_list()[1:3]
 
         # 2）获取 RPN 初步预测结果；
         # shape [num_anchors*feature_width*feature_height, 2], [num_anchors*feature_width*feature_height, 4]
@@ -84,8 +85,7 @@ class BaseFasterRcnnModel(tf.keras.Model):
 
         # 3）获取 Anchors；
         anchors = generate_anchors_np(self._scales, self._ratios,
-                                      (image_shape[0] // self._extractor_stride,
-                                       image_shape[1] // self._extractor_stride)) * self._extractor_stride
+                                      (shared_feature_shape[0], shared_feature_shape[1])) * self._extractor_stride
 
         # 4）获取 RPN Proposal 结果；
         rpn_proposals_bboxes = self._rpn_proposal((rpn_bboxes_txtytwth,
@@ -136,6 +136,7 @@ class RpnTrainingModel(tf.keras.Model):
              image_shape),
             training,
             mask)
+        # print('pos sample num is %d' % pos_sample_number)
 
         # inputs: rpn_training_idx, rpn_training_labels & rpn_score
         rpn_training_score = tf.gather(rpn_score, rpn_training_idx)
@@ -148,7 +149,7 @@ class RpnTrainingModel(tf.keras.Model):
         # 3. 通过 rpn_training_idx, rpn_training_labels 可设置 loss 的weight，即只计算正例的回归损失函数。
         # 4. 通过1中的预测结果以及2中的真实结果，结合3中的损失函数权重，计算smooth L1损失函数。
         # 计算损失函数中的 label，可以使用Numpy
-        if pos_sample_number == 0:
+        if pos_sample_number.numpy() == 0:
             rpn_reg_loss = 0
         else:
             rpn_training_idx = rpn_training_idx[:pos_sample_number]  # [num_pos, ]
@@ -215,7 +216,7 @@ class RoiTrainingModel(tf.keras.Model):
         # inputs: roi_training_idx, roi_training_labels, roi_training_gt_bbox_idx,
         #         roi_predicting_bboxes, rpn_proposals_bboxes, gt_bboxes
         # 只计算正例的损失函数
-        if pos_sample_num == 0:
+        if pos_sample_num.numpy() == 0:
             roi_reg_loss = 0
         else:
             roi_training_idx = roi_training_idx[:pos_sample_num]  # [num_pos, ]
