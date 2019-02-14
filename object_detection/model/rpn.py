@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from object_detection.utils.bbox_transform import decode_bbox
+from object_detection.utils.bbox_transform import decode_bbox_with_mean_and_std
 from object_detection.utils.bbox_tf import pairwise_iou
 
 layers = tf.keras.layers
@@ -13,19 +13,20 @@ class RPNHead(tf.keras.Model):
         """
         super().__init__()
         self._rpn_conv = layers.Conv2D(512, [3, 3],
-                                       padding='same', name='rpn_first_conv',
-                                       kernel_initializer='he_normal',
-                                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay),)
-        self._rpn_bn = layers.BatchNormalization()
+                                       padding='same', name='rpn_first_conv', activation='relu',
+                                       kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )
 
         self._rpn_score_conv = layers.Conv2D(num_anchors * 2, [1, 1],
                                              padding='valid', name='rpn_score_conv',
-                                             kernel_initializer='he_normal',
+                                             activation=None,
+                                             kernel_initializer=tf.random_normal_initializer(0, 0.01),
                                              kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
 
         self._rpn_bbox_conv = layers.Conv2D(num_anchors * 4, [1, 1],
                                             padding='valid', name='rpn_bbox_conv',
-                                            kernel_initializer='he_normal',
+                                            activation=None,
+                                            kernel_initializer=tf.random_normal_initializer(0, 0.01),
                                             kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
 
     def call(self, inputs, training=None, mask=None):
@@ -37,17 +38,14 @@ class RPNHead(tf.keras.Model):
         :return:
         """
         x = self._rpn_conv(inputs)
-        x = self._rpn_bn(x, training)
-        x = tf.nn.relu(x)
 
         rpn_score = self._rpn_score_conv(x)
         rpn_score_reshape = tf.reshape(rpn_score, [-1, 2])
-        rpn_score_softmax = tf.nn.softmax(rpn_score_reshape)
 
         rpn_bbox = self._rpn_bbox_conv(x)
         rpn_bbox_reshape = tf.reshape(rpn_bbox, [-1, 4])
 
-        return rpn_score_softmax, rpn_bbox_reshape
+        return rpn_score_reshape, rpn_bbox_reshape
 
 
 class RPNTrainingProposal(tf.keras.Model):
@@ -96,20 +94,22 @@ class RPNTrainingProposal(tf.keras.Model):
         # 3. 设置与 gt_bboxes 的 max_iou > pos_iou_threshold 的anchor为正例
         #    设置 max_iou < neg_iou_threshold 的anchor为反例。
         max_ious = tf.reduce_max(iou, axis=1)
-        argmax_ious = tf.argmax(iou, axis=1)
+        argmax_ious = tf.argmax(iou, axis=1, output_type=tf.int32)
         labels = tf.where(max_ious > self._pos_iou_threshold, tf.ones_like(labels), labels)
         labels = tf.where(max_ious < self._neg_iou_threshold, tf.zeros_like(labels), labels)
 
         # # TODO: 使用 tensorflow 实现下面 numpy 操作
-        # # TODO: 存在bug，假设：所有gts中与anchor1 iou最大的是gt1，所有anchors中与gt2 iou最大的是anchor1
-        # # TODO: 此时 argmax_ious 可能存在问题
         # # 4. 设置与每个 gt_bboxes 的iou最大的anchor为正例。
         # # 获取与每个 gt_bboxes 的 iou 最大的anchor的编号，设置这些anchor为正例
         # # labels[gt_argmax_ious] = 1
-        # gt_argmax_ious = tf.argmax(iou, axis=0)  # [gt_bboxes_size]
-        # cond = np.zeros([anchors.shape[0]], dtype=np.int32)
-        # cond[gt_argmax_ious.numpy()] = 1
-        # labels = tf.where(tf.equal(cond, 1), tf.ones_like(labels), labels)
+        gt_argmax_ious = tf.argmax(iou, axis=0, output_type=tf.int32)  # [gt_bboxes_size]
+        target_gt_idx = np.zeros([labels.shape[0], ], dtype=np.int32)
+        for gt_id, anchor_id in enumerate(gt_argmax_ious):
+            target_gt_idx[anchor_id] = gt_id
+        cond = np.zeros([anchors.shape[0]], dtype=np.int32)
+        cond[gt_argmax_ious.numpy()] = 1
+        labels = tf.where(tf.equal(cond, 1), tf.ones_like(labels), labels)
+        argmax_ious = tf.where(tf.equal(cond, 1), tf.constant(target_gt_idx, dtype=tf.int32), argmax_ious)
 
         # 计算正反例真实数量
         total_pos_num = tf.reduce_sum(tf.where(tf.equal(labels, 1), tf.ones_like(labels), tf.zeros_like(labels)))
@@ -174,13 +174,14 @@ class RPNProposal(tf.keras.Model):
 
         # 1. 使用anchors使用rpn_pred修正，获取所有预测结果。
         # [num_anchors*feature_width*feature_height, 4]
-        # print(np.max(bboxes_txtytwth), np.min(bboxes_txtytwth))
-        decoded_bboxes = decode_bbox(anchors, bboxes_txtytwth)
+        # print('rpn txtytwth max & min', np.max(bboxes_txtytwth), np.min(bboxes_txtytwth))
+        decoded_bboxes = decode_bbox_with_mean_and_std(anchors, bboxes_txtytwth)
 
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, selected_idx = proposal_filter(decoded_bboxes,
-                                                        0, image_shape[0], image_shape[1], extractor_stride)
+                                                       0, image_shape[0], image_shape[1], extractor_stride)
         scores = tf.gather(scores, selected_idx)
+        # print('rpn after filter has %d proposals' % tf.size(selected_idx))
 
         # 3. 根据rpn_score获取num_pre_nms个anchors。
         num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
@@ -188,17 +189,20 @@ class RPNProposal(tf.keras.Model):
         _, selected_idx = tf.nn.top_k(scores, k=cur_top_k, sorted=False)
         decoded_bboxes = tf.gather(decoded_bboxes, selected_idx)
         scores = tf.gather(scores, selected_idx)
+        # print('rpn after score filter has %d proposals' % (tf.size(scores)))
 
         # 4. 进行nms。
         # 5. 根据rpn_score排序，获取num_post_nms个anchors作为proposal结果。
         num_post_nms = self._num_post_nms_train if training else self._num_post_nms_test
         cur_top_k = tf.minimum(num_post_nms, tf.size(scores))
+        # print('after nms top k is %d' % cur_top_k.numpy())
         selected_idx = tf.image.non_max_suppression(tf.to_float(decoded_bboxes), scores, cur_top_k,
                                                     iou_threshold=self._nms_iou_threshold)
 
         # print('rpn proposal net generate %d proposals' % tf.size(selected_idx))
+        # print(tf.gather(decoded_bboxes, selected_idx))
 
-        return tf.gather(decoded_bboxes, selected_idx)
+        return tf.stop_gradient(tf.gather(decoded_bboxes, selected_idx))
 
 
 def proposal_filter(rpn_proposals, min_value, max_height, max_width, min_edge=None):

@@ -9,7 +9,6 @@ __all__ = ['get_dataset']
 
 def _get_default_iaa_sequence():
     return [
-        # iaa.Flipud(0.5),
         iaa.Fliplr(0.5),
     ]
 
@@ -88,13 +87,15 @@ def _caffe_preprocessing(image):
     :param image:
     :return:
     """
-    image = tf.to_float(image)
-    image = image[..., ::-1]
-    means = [103.939, 116.779, 123.68]
-    channels = tf.split(axis=-1, num_or_size_splits=3, value=image)
-    for i in range(3):
-        channels[i] -= means[i]
-    return tf.concat(axis=-1, values=channels)
+    # image = tf.to_float(image)
+    # image = image[..., ::-1]
+    # means = [103.939, 116.779, 123.68]
+    # channels = tf.split(axis=-1, num_or_size_splits=3, value=image)
+    # for i in range(3):
+    #     channels[i] -= means[i]
+    # return tf.concat(axis=-1, values=channels)
+
+    return tf.keras.applications.vgg16.preprocess_input(image)
 
 
 def _tf_preprocessing(image):
@@ -103,7 +104,7 @@ def _tf_preprocessing(image):
     :param image:
     :return:
     """
-    return tf.image.convert_image_dtype(image, tf.float32)
+    return tf.keras.applications.resnet50.preprocess_input(image, mode='tf')
 
 
 def get_dataset(tf_records_list,
@@ -129,7 +130,6 @@ def get_dataset(tf_records_list,
     其中，默认数据增强包括：
     ```
     iaa_sequence = [
-            iaa.Flipud(0.5),
             iaa.Fliplr(0.5),
         ]
     ```

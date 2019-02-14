@@ -6,6 +6,7 @@ from object_detection.model.faster_rcnn import BaseFasterRcnnModel, FasterRcnnTr
     RoiTrainingModel, post_ops_prediction
 from object_detection.config.faster_rcnn_config import CONFIG
 from object_detection.utils.pascal_voc_map_utils import eval_detection_voc
+from object_detection.utils.visual_utils import show_one_image
 from tensorflow.contrib.summary import summary
 import time
 
@@ -13,6 +14,10 @@ tf.enable_eager_execution()
 
 
 def apply_gradients(model, optimizer, gradients):
+    # for grad, var in zip(gradients, model.variables):
+    #     if grad is not None:
+    #         print(var.name, var.trainable, tf.reduce_min(grad).numpy(), tf.reduce_max(grad).numpy())
+
     optimizer.apply_gradients(zip(gradients, model.variables),
                               global_step=tf.train.get_or_create_global_step())
 
@@ -87,6 +92,7 @@ def _get_vgg16_faster_rcnn_model():
         rpn_training_model=RpnTrainingModel(
             cls_loss_weight=CONFIG['rpn_cls_loss_weight'],
             reg_loss_weight=CONFIG['rpn_reg_loss_weight'],
+            sigma=CONFIG['rpn_sigma'],
             rpn_training_pos_iou_threshold=CONFIG['rpn_pos_iou_threshold'],
             rpn_training_neg_iou_threshold=CONFIG['rpn_neg_iou_threshold'],
             rpn_training_total_num_samples=CONFIG['rpn_total_sample_number'],
@@ -96,6 +102,7 @@ def _get_vgg16_faster_rcnn_model():
             num_classes=CONFIG['num_classes'],
             cls_loss_weight=CONFIG['roi_cls_loss_weight'],
             reg_loss_weight=CONFIG['roi_reg_loss_weight'],
+            sigma=CONFIG['roi_sigma'],
             roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
             roi_training_neg_iou_threshold=CONFIG['roi_neg_iou_threshold'],
             roi_training_total_num_samples=CONFIG['roi_total_sample_number'],
@@ -106,7 +113,12 @@ def _get_vgg16_faster_rcnn_model():
 
 
 def _get_default_optimizer():
-    return tf.train.MomentumOptimizer(CONFIG['learning_rate_start'], momentum=CONFIG['optimizer_momentum'])
+    lr = tf.train.exponential_decay(CONFIG['learning_rate_start'],
+                                    tf.train.get_or_create_global_step(),
+                                    CONFIG['learning_rate_decay_steps'],
+                                    CONFIG['learning_rate_decay_rate'],
+                                    True)
+    return tf.train.MomentumOptimizer(lr, momentum=CONFIG['optimizer_momentum'])
 
 
 def _get_training_dataset(preprocessing_type='caffe'):
@@ -133,11 +145,14 @@ def _get_evaluating_dataset(preprocessing_type='caffe'):
                        argument=False, )
 
 
-def train_one_epoch(dataset, base_model, training_model, optimizer, saver, logs_every_n_steps=50):
+def train_one_epoch(dataset, base_model, training_model, optimizer, saver=None, logs_every_n_steps=20,
+                    save_every_n_steps=2500):
+    start_time = time.time()
     for idx, (image, gt_bboxes, gt_labels, _) in enumerate(dataset):
+        gt_bboxes = tf.squeeze(gt_bboxes, axis=0)
+        gt_labels = tf.to_int32(tf.squeeze(gt_labels, axis=0))
         with tf.GradientTape() as tape:
-            shape, anchors, rpn_score, rpn_txtytwth, rpn_proposals, roi_score, roi_txtytwth = base_model(image,
-                                                                                                         True)
+            shape, anchors, rpn_score, rpn_txtytwth, rpn_proposals, roi_score, roi_txtytwth = base_model(image, True)
             rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = training_model((gt_bboxes, gt_labels,
                                                                                      shape, anchors,
                                                                                      rpn_score, rpn_txtytwth,
@@ -145,9 +160,10 @@ def train_one_epoch(dataset, base_model, training_model, optimizer, saver, logs_
                                                                                      roi_score, roi_txtytwth),
                                                                                     True)
             l2_loss = tf.add_n(base_model.losses)
-            total_loss = rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss + l2_loss
+            total_loss = rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss
+#             total_loss = rpn_cls_loss + rpn_reg_loss
+#             total_loss = roi_cls_loss + roi_reg_loss
 
-            tf.contrib.summary.graph(tf.get_default_graph())
             tf.contrib.summary.scalar("rpn_cls_loss", rpn_cls_loss)
             tf.contrib.summary.scalar("rpn_reg_loss", rpn_reg_loss)
             tf.contrib.summary.scalar("roi_cls_loss", roi_cls_loss)
@@ -162,18 +178,36 @@ def train_one_epoch(dataset, base_model, training_model, optimizer, saver, logs_
                                                                          roi_cls_loss, roi_reg_loss,
                                                                          tf.add_n(base_model.losses), total_loss)
                   )
-        if idx % 1000 == 0:
-            saver.save('E:\\PycharmProjects\\tf_eager_object_detection\\logs\\model.ckpt')
+            print('cur spped: %.2f it/s' % ((idx + 1) / (time.time() - start_time)))
+            shape, _, _, _, rpn_proposals, roi_score, roi_txtytwth = base_model(image, False)
+            pred_bboxes, pred_labels, pred_scores = post_ops_prediction((rpn_proposals, roi_score, roi_txtytwth, shape),
+                                                                        num_classes=CONFIG['num_classes'],
+                                                                        max_num_per_class=CONFIG[
+                                                                            'max_objects_per_class_per_image'],
+                                                                        max_num_per_image=CONFIG[
+                                                                            'max_objects_per_image'],
+                                                                        nms_iou_threshold=CONFIG[
+                                                                            'predictions_nms_iou_threshold'],
+                                                                        score_threshold=0.3,
+                                                                        )
+            gt_image = show_one_image(tf.squeeze(image, axis=0).numpy(), gt_bboxes.numpy(), gt_labels.numpy())
+            tf.contrib.summary.image("gt_image", tf.expand_dims(gt_image, axis=0))
+            if pred_bboxes is not None:
+                pred_image = show_one_image(tf.squeeze(image, axis=0).numpy(), pred_bboxes.numpy(), pred_labels.numpy())
+                tf.contrib.summary.image("pred_image", tf.expand_dims(pred_image, axis=0))
+
+        if saver is not None and idx % save_every_n_steps == 0:
+            saver.save('/home/tensorflow05/zyy/tf_eager_object_detection/logs/model.ckpt')
 
 
 def train(training_dataset, evaluating_dataset, base_model, training_model, optimizer,
-          train_dir='E:\\PycharmProjects\\tf_eager_object_detection\\logs',
-          val_dir='E:\\PycharmProjects\\tf_eager_object_detection\\logs\\val'):
+          train_dir='/home/tensorflow05/zyy/tf_eager_object_detection/logs',
+          val_dir='/home/tensorflow05/zyy/tf_eager_object_detection/logs/val',
+          # train_dir='E:\\PycharmProjects\\tf_eager_object_detection\\logs',
+          # val_dir='E:\\PycharmProjects\\tf_eager_object_detection\\logs\\val',
+
+          ):
     tf.train.get_or_create_global_step()
-    ckpt = tf.train.Checkpoint(model=base_model)
-    # ckpt.save(file_prefix='E:\\PycharmProjects\\tf_eager_object_detection\\logs\\model.ckpt')
-    # saver = Saver(base_model.variables)
-    # saver.save('E:\\PycharmProjects\\tf_eager_object_detection\\logs\\model.ckpt')
     train_writer = tf.contrib.summary.create_file_writer(train_dir, flush_millis=100000)
     val_writer = tf.contrib.summary.create_file_writer(val_dir, flush_millis=10000)
 
@@ -181,14 +215,14 @@ def train(training_dataset, evaluating_dataset, base_model, training_model, opti
         print('epoch %d starting...' % (i + 1))
         start = time.time()
         with train_writer.as_default(), summary.record_summaries_every_n_global_steps(50):
-            train_one_epoch(training_dataset, base_model, training_model, optimizer, ckpt)
+            train_one_epoch(training_dataset, base_model, training_model, optimizer)
         train_end = time.time()
         print('epoch %d training finished, costing %d seconds, start evaluating...' % (i + 1, train_end - start))
-        # with val_writer.as_default(), tf.contrib.summary.always_record_summaries():
-        #     res = evaluate(evaluating_dataset, cur_base_model)
-        # print('epoch %d evaluating finished, costing %d seconds, current mAP is %.4f' % (i + 1,
-        #                                                                                  time.time() - train_end,
-        #                                                                                  res['map']))
+        with val_writer.as_default(), tf.contrib.summary.always_record_summaries():
+            res = evaluate(evaluating_dataset, cur_base_model)
+        print('epoch %d evaluating finished, costing %d seconds, current mAP is %.4f' % (i + 1,
+                                                                                         time.time() - train_end,
+                                                                                         res['map']))
 
 
 def evaluate(dataset, base_faster_rcnn_model, use_07_metric=False):
@@ -214,6 +248,7 @@ def evaluate(dataset, base_faster_rcnn_model, use_07_metric=False):
                                                                                     'max_objects_per_image'],
                                                                                 nms_iou_threshold=CONFIG[
                                                                                     'predictions_nms_iou_threshold'],
+                                                                                score_threshold=0.05,
                                                                                 )
         gt_bboxes.append(cur_gt_bboxes.numpy())
         gt_labels.append(cur_gt_labels.numpy())
@@ -230,13 +265,13 @@ def evaluate(dataset, base_faster_rcnn_model, use_07_metric=False):
 
 
 if __name__ == '__main__':
-    # cur_base_model, cur_training_model = _get_vgg16_faster_rcnn_model()
-    # cur_training_dataset = _get_training_dataset('caffe')
-    # cur_evaluation_dataset = _get_evaluating_dataset('caffe')
+    cur_base_model, cur_training_model = _get_vgg16_faster_rcnn_model()
+    cur_training_dataset = _get_training_dataset('caffe')
+    cur_evaluation_dataset = _get_evaluating_dataset('caffe')
 
-    cur_base_model, cur_training_model = _get_resnet101_faster_rcnn_model()
-    cur_training_dataset = _get_training_dataset('tf')
-    cur_evaluation_dataset = _get_evaluating_dataset('tf')
+    # cur_base_model, cur_training_model = _get_resnet101_faster_rcnn_model()
+    # cur_training_dataset = _get_training_dataset('tf')
+    # cur_evaluation_dataset = _get_evaluating_dataset('tf')
 
     cur_optimizer = _get_default_optimizer()
     train(cur_training_dataset, cur_evaluation_dataset, cur_base_model, cur_training_model, cur_optimizer)

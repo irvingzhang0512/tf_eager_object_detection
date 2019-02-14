@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 
-def encode_bbox_with_mean_and_std(src_bbox, dst_bbox, target_means, target_stds):
+def encode_bbox_with_mean_and_std(src_bbox, dst_bbox, target_means=[0, 0, 0, 0], target_stds=[1, 1, 1, 1]):
     """Compute refinement needed to transform box to gt_box.
 
     Args
@@ -39,7 +39,7 @@ def encode_bbox_with_mean_and_std(src_bbox, dst_bbox, target_means, target_stds)
     return delta
 
 
-def decode_bbox_with_mean_and_std(anchors, bboxes_txtytwth, target_means, target_stds):
+def decode_bbox_with_mean_and_std(anchors, bboxes_txtytwth, target_means=[0, 0, 0, 0], target_stds=[1, 1, 1, 1]):
     """Compute bounding box based on roi and delta.
 
     Args

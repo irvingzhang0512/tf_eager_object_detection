@@ -4,6 +4,72 @@ from object_detection.utils.bbox_tf import pairwise_iou
 layers = tf.keras.layers
 
 
+def crop_and_resize(image, boxes, box_ind, crop_size, pad_border=True):
+    assert isinstance(crop_size, int), crop_size
+    boxes = tf.stop_gradient(boxes)
+
+    # TF's crop_and_resize produces zeros on border
+    if pad_border:
+        # this can be quite slow
+        image = tf.pad(image, [[0, 0], [0, 0], [1, 1], [1, 1]], mode='SYMMETRIC')
+        boxes = boxes + 1
+
+    def transform_fpcoor_for_tf(boxes, image_shape, crop_shape):
+        """
+        The way tf.image.crop_and_resize works (with normalized box):
+        Initial point (the value of output[0]): x0_box * (W_img - 1)
+        Spacing: w_box * (W_img - 1) / (W_crop - 1)
+        Use the above grid to bilinear sample.
+        However, what we want is (with fpcoor box):
+        Spacing: w_box / W_crop
+        Initial point: x0_box + spacing/2 - 0.5
+        (-0.5 because bilinear sample (in my definition) assumes floating point coordinate
+         (0.0, 0.0) is the same as pixel value (0, 0))
+        This function transform fpcoor boxes to a format to be used by tf.image.crop_and_resize
+        Returns:
+            y1x1y2x2
+        """
+        x0, y0, x1, y1 = tf.split(boxes, 4, axis=1)
+
+        spacing_w = (x1 - x0) / tf.cast(crop_shape[1], tf.float32)
+        spacing_h = (y1 - y0) / tf.cast(crop_shape[0], tf.float32)
+
+        imshape = [tf.cast(image_shape[0] - 1, tf.float32), tf.cast(image_shape[1] - 1, tf.float32)]
+        nx0 = (x0 + spacing_w / 2 - 0.5) / imshape[1]
+        ny0 = (y0 + spacing_h / 2 - 0.5) / imshape[0]
+
+        nw = spacing_w * tf.cast(crop_shape[1] - 1, tf.float32) / imshape[1]
+        nh = spacing_h * tf.cast(crop_shape[0] - 1, tf.float32) / imshape[0]
+
+        return tf.concat([ny0, nx0, ny0 + nh, nx0 + nw], axis=1)
+
+    image_shape = tf.shape(image)[1:3]
+    boxes = transform_fpcoor_for_tf(boxes, image_shape, [crop_size, crop_size])
+    ret = tf.image.crop_and_resize(
+        image, boxes, tf.cast(box_ind, tf.int32),
+        crop_size=[crop_size, crop_size])
+    ret = tf.transpose(ret, [0, 3, 1, 2])   # ncss
+    return ret
+
+
+def roi_align(featuremap, boxes, resolution):
+    """
+    Args:
+        featuremap: 1xHxWxC
+        boxes: [0, 1]
+        resolution: output spatial resolution
+    Returns:
+        NxCx res x res
+    """
+    # sample 4 locations per roi bin
+    ret = crop_and_resize(
+        featuremap, boxes,
+        tf.zeros([tf.shape(boxes)[0]], dtype=tf.int32),
+        resolution * 2)
+    ret = tf.nn.avg_pool(ret, [1, 2, 2, 1], [1, 2, 2, 1], padding='SAME')
+    return ret
+
+
 class RoiPooling(tf.keras.Model):
     def __init__(self, pool_size):
         super().__init__()
@@ -24,7 +90,9 @@ class RoiPooling(tf.keras.Model):
         shared_layers, rois, extractor_stride = inputs
         rois = rois / extractor_stride
 
-        # TODO: ROI Polling 的细节
+        # # TODO: ROI Polling 的细节
+
+        # 方法一
         res = []
         for roi in rois:
             ymin = tf.to_int32(roi[0])
@@ -35,30 +103,51 @@ class RoiPooling(tf.keras.Model):
                 tf.image.resize_bilinear(shared_layers[:, ymin:ymax + 1, xmin:xmax + 1, :],
                                          [self._pool_size, self._pool_size]))
         net = self._concat_layer(res)
-        return self._flatten_layer(net)
+        net = self._flatten_layer(net)
+        return tf.stop_gradient(net)
+
+        # # 方法二
+        # # roi align copy from https://github.com/tensorpack/tensorpack/blob/master/examples/FasterRCNN/model_box.py
+        # h, w = shared_layers.get_shape().as_list()[1:3]
+        # roi_channels = tf.split(rois, 4, axis=1)
+        # rois = tf.concat([
+        #     roi_channels[0]/tf.to_float(h),
+        #     roi_channels[1]/tf.to_float(w),
+        #     roi_channels[2]/tf.to_float(h),
+        #     roi_channels[3]/tf.to_float(w),
+        # ], axis=1)
+        #
+        # net = self._flatten_layer(roi_align(shared_layers, rois, self._pool_size))
+        # return tf.stop_gradient(net)
 
 
 class RoiHead(tf.keras.Model):
-    def __init__(self, num_classes, keep_rate=0.5, weight_decay=0.0005):
+    def __init__(self, num_classes,
+                 fc1=None, fc2=None,
+                 keep_rate=0.5, weight_decay=0.0005):
         super().__init__()
         self._num_classes = num_classes
 
-        self._fc1 = layers.Dense(1024, name='roi_head_fc1',
-                                 kernel_initializer='he_normal',
-                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
-        self._bn1 = layers.BatchNormalization()
+        if fc1 is None:
+            self._fc1 = layers.Dense(1024, name='fc1',
+                                     kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                                     kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        else:
+            self._fc1 = fc1
+        if fc2 is None:
+            self._fc2 = layers.Dense(1024, name='fc2',
+                                     kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                                     kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        else:
+            self._fc2 = fc2
         self._dropout1 = layers.Dropout(rate=1 - keep_rate)
-        self._fc2 = layers.Dense(1024, name='roi_head_fc2',
-                                 kernel_initializer='he_normal',
-                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
-        self._bn2 = layers.BatchNormalization()
         self._dropout2 = layers.Dropout(rate=1 - keep_rate)
 
-        self._score_prediction = layers.Dense(num_classes, activation=tf.nn.softmax, name='roi_head_score',
-                                              kernel_initializer='he_normal',
+        self._score_prediction = layers.Dense(num_classes, name='roi_head_score',
+                                              kernel_initializer=tf.random_normal_initializer(0, 0.01),
                                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
         self._bbox_prediction = layers.Dense(4 * num_classes, name='roi_head_bboxes',
-                                             kernel_initializer='he_normal',
+                                             kernel_initializer=tf.random_normal_initializer(0, 0.001),
                                              kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
 
     def call(self, inputs, training=None, mask=None):
@@ -72,9 +161,7 @@ class RoiHead(tf.keras.Model):
         """
         net = self._fc1(inputs)
         net = self._dropout1(net, training)
-        net = tf.nn.relu(self._bn1(net, training))
         net = self._fc2(net)
-        net = tf.nn.relu(self._bn2(net, training))
         net = self._dropout2(net, training)
         roi_score = self._score_prediction(net)
         roi_bboxes_txtytwth = self._bbox_prediction(net)
@@ -85,7 +172,7 @@ class RoiHead(tf.keras.Model):
 class RoiTrainingProposal(tf.keras.Model):
     def __init__(self,
                  pos_iou_threshold=0.5,
-                 neg_iou_threshold=0.1,
+                 neg_iou_threshold=0.5,
                  total_num_samples=128,
                  max_pos_samples=32, ):
         super().__init__()

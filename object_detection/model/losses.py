@@ -32,5 +32,5 @@ def smooth_l1_loss(bbox_txtytwth_pred, bbox_txtytwth_gt, outside_weights=1, sigm
                     )
 
     out_loss_box = outside_weights * loss
-    loss_box = tf.reduce_mean(tf.reduce_sum(out_loss_box, axis=1))
+    loss_box = tf.reduce_sum(out_loss_box)
     return loss_box

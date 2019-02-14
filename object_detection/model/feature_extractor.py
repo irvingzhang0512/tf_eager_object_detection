@@ -5,6 +5,9 @@ VGG_16_WEIGHTS_PATH_NO_TOP = ('https://github.com/fchollet/deep-learning-models/
                               'releases/download/v0.1/'
                               'vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5')
 
+VGG_16_WEIGHTS_PATH = ('https://github.com/fchollet/deep-learning-models/'
+                       'releases/download/v0.1/'
+                       'vgg16_weights_tf_dim_ordering_tf_kernels.h5')
 RESNET_50_WEIGHTS_PATH_NO_TOP = ('https://github.com/fchollet/deep-learning-models/'
                                  'releases/download/v0.2/'
                                  'resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5')
@@ -82,14 +85,24 @@ class Vgg16Extractor(tf.keras.Model):
                           padding='same',
                           name='block5_conv3')(x)
 
+        self.fc1 = layers.Dense(4096, activation='relu', name='fc1', trainable=True)
+        self.fc2 = layers.Dense(4096, activation='relu', name='fc2', trainable=True)
+
         model = tf.keras.Model(img_input, x, name='vgg16')
 
+        # weights_path = tf.keras.utils.get_file(
+        #     'vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5',
+        #     VGG_16_WEIGHTS_PATH_NO_TOP,
+        #     cache_subdir='models',
+        #     file_hash='6d6bbae143d832006294945121d1f1fc')
+
         weights_path = tf.keras.utils.get_file(
-            'vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5',
-            VGG_16_WEIGHTS_PATH_NO_TOP,
+            'vgg16_weights_tf_dim_ordering_tf_kernels.h5',
+            VGG_16_WEIGHTS_PATH,
             cache_subdir='models',
-            file_hash='6d6bbae143d832006294945121d1f1fc')
-        model.load_weights(weights_path)
+            file_hash='64373286793e3c8b2b4e3219cbf3544b')
+
+        model.load_weights(weights_path, by_name=True)
         self._model = model
 
     def call(self, inputs, training=None, mask=None):
@@ -234,10 +247,10 @@ class ResNet50Extractor(tf.keras.Model):
         model = tf.keras.Model(img_input, x, name='resnet50')
 
         weights_path = tf.keras.utils.get_file(
-                'resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5',
-                RESNET_50_WEIGHTS_PATH_NO_TOP,
-                cache_subdir='models',
-                md5_hash='a268eb855778b3df3c7506639542a6af')
+            'resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5',
+            RESNET_50_WEIGHTS_PATH_NO_TOP,
+            cache_subdir='models',
+            md5_hash='a268eb855778b3df3c7506639542a6af')
         model.load_weights(weights_path)
         self._model = model
 
