@@ -2,8 +2,12 @@ import tensorflow as tf
 import numpy as np
 from object_detection.utils.bbox_transform import decode_bbox_with_mean_and_std
 from object_detection.utils.bbox_tf import pairwise_iou
+from tensorflow.python.platform import tf_logging
+
 
 layers = tf.keras.layers
+
+__all__ = ['RPNHead', 'RPNTrainingProposal', 'RPNProposal', 'proposal_filter']
 
 
 class RPNHead(tf.keras.Model):
@@ -85,7 +89,7 @@ class RPNTrainingProposal(tf.keras.Model):
         # 1. 对 anchors 进行过滤，筛选符合边界要求的 anchor，之后操作都基于筛选后的结果。
         selected_anchor_idx = _anchors_filter(anchors, image_shape[0], image_shape[1])
         anchors = anchors[selected_anchor_idx]
-        # print('after filter has %d anchors' % anchors.shape[0])
+        tf_logging.debug('rpn training, after filter has %d anchors' % anchors.shape[0])
 
         # 2. 计算 anchors 与gt_bboxes（即输入数据中的bbox）的iou。
         labels = -tf.ones((anchors.shape[0],), tf.int32)
@@ -118,7 +122,7 @@ class RPNTrainingProposal(tf.keras.Model):
         # 根据要求，修正正反例数量
         cur_pos_num = tf.minimum(total_pos_num, self._max_pos_samples)
         cur_neg_num = tf.minimum(self._total_num_samples - cur_pos_num, total_neg_num)
-        # print('rpn training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
+        tf_logging.debug('rpn training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
 
         # 随机选择正例和反例
         total_pos_index = tf.squeeze(tf.where(tf.equal(labels, 1)), axis=1)
@@ -174,14 +178,14 @@ class RPNProposal(tf.keras.Model):
 
         # 1. 使用anchors使用rpn_pred修正，获取所有预测结果。
         # [num_anchors*feature_width*feature_height, 4]
-        # print('rpn txtytwth max & min', np.max(bboxes_txtytwth), np.min(bboxes_txtytwth))
+        tf_logging.debug(('rpn head txtytwth max & min', np.max(bboxes_txtytwth), np.min(bboxes_txtytwth)))
         decoded_bboxes = decode_bbox_with_mean_and_std(anchors, bboxes_txtytwth)
 
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, selected_idx = proposal_filter(decoded_bboxes,
                                                        0, image_shape[0], image_shape[1], extractor_stride)
         scores = tf.gather(scores, selected_idx)
-        # print('rpn after filter has %d proposals' % tf.size(selected_idx))
+        tf_logging.debug('rpn after filter has %d proposals' % tf.size(selected_idx))
 
         # 3. 根据rpn_score获取num_pre_nms个anchors。
         num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
@@ -189,18 +193,17 @@ class RPNProposal(tf.keras.Model):
         _, selected_idx = tf.nn.top_k(scores, k=cur_top_k, sorted=False)
         decoded_bboxes = tf.gather(decoded_bboxes, selected_idx)
         scores = tf.gather(scores, selected_idx)
-        # print('rpn after score filter has %d proposals' % (tf.size(scores)))
+        tf_logging.debug('rpn after score filter has %d proposals' % (tf.size(scores)))
 
         # 4. 进行nms。
         # 5. 根据rpn_score排序，获取num_post_nms个anchors作为proposal结果。
         num_post_nms = self._num_post_nms_train if training else self._num_post_nms_test
         cur_top_k = tf.minimum(num_post_nms, tf.size(scores))
-        # print('after nms top k is %d' % cur_top_k.numpy())
+        tf_logging.debug('after nms top k is %d' % cur_top_k.numpy())
         selected_idx = tf.image.non_max_suppression(tf.to_float(decoded_bboxes), scores, cur_top_k,
                                                     iou_threshold=self._nms_iou_threshold)
 
-        # print('rpn proposal net generate %d proposals' % tf.size(selected_idx))
-        # print(tf.gather(decoded_bboxes, selected_idx))
+        tf_logging.debug('rpn proposal net generate %d proposals' % tf.size(selected_idx))
 
         return tf.stop_gradient(tf.gather(decoded_bboxes, selected_idx))
 

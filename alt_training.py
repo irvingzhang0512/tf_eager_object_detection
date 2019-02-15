@@ -1,13 +1,12 @@
 import tensorflow as tf
-from object_detection.model.feature_extractor import Vgg16Extractor
+from model.extractor.feature_extractor import Vgg16Extractor
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset
 from object_detection.model.faster_rcnn import RpnTrainingModel, \
-    RoiTrainingModel, post_ops_prediction, BaseRoiModel, BaseRpnModel
+    RoiTrainingModel, BaseRoiModel, BaseRpnModel
 from object_detection.config.faster_rcnn_config import CONFIG
-from object_detection.utils.pascal_voc_map_utils import eval_detection_voc
-from object_detection.utils.visual_utils import show_one_image
 from tensorflow.contrib.summary import summary
-import time
+from tensorflow.python.platform import tf_logging
+from tqdm import tqdm
 
 tf.enable_eager_execution()
 
@@ -15,7 +14,7 @@ tf.enable_eager_execution()
 def apply_gradients(model, optimizer, gradients):
     # for grad, var in zip(gradients, model.variables):
     #     if grad is not None:
-    #         print(var.name)
+    #         tf_logging.info(var.name)
     optimizer.apply_gradients(zip(gradients, model.variables),
                               global_step=tf.train.get_or_create_global_step())
 
@@ -102,10 +101,10 @@ def _get_roi_default_model(extractor):
 def train_one_epoch(rpn_model, rpn_training_model,
                     roi_model, roi_training_model,
                     dataset, optimizer):
-    for idx, (image, gt_bboxes, gt_labels, _) in enumerate(dataset):
+    for idx, (image, gt_bboxes, gt_labels, _) in tqdm(enumerate(dataset)):
         gt_bboxes = tf.squeeze(gt_bboxes, axis=0)
         gt_labels = tf.to_int32(tf.squeeze(gt_labels, axis=0))
-        print()
+        tf_logging.info()
 
         with tf.GradientTape() as tape:
             image_shape, anchors, rpn_score, rpn_bboxes_txtytwth, rpn_proposals_bboxes, shared_features = rpn_model(
@@ -114,7 +113,7 @@ def train_one_epoch(rpn_model, rpn_training_model,
                                                              rpn_bboxes_txtytwth, gt_bboxes), True)
             tf.contrib.summary.scalar("rpn_cls_loss", rpn_cls_loss)
             tf.contrib.summary.scalar("rpn_reg_loss", rpn_reg_loss)
-            print('rpn loss', rpn_cls_loss.numpy(), rpn_reg_loss.numpy())
+            tf_logging.info('rpn loss', rpn_cls_loss.numpy(), rpn_reg_loss.numpy())
 
             train_step(rpn_model, rpn_cls_loss + rpn_reg_loss, tape, optimizer)
 
@@ -125,7 +124,7 @@ def train_one_epoch(rpn_model, rpn_training_model,
                                                              gt_bboxes, gt_labels), True)
             tf.contrib.summary.scalar("roi_cls_loss", roi_cls_loss)
             tf.contrib.summary.scalar("roi_reg_loss", roi_reg_loss)
-            print('roi loss', roi_cls_loss.numpy(), roi_reg_loss.numpy())
+            tf_logging.info('roi loss', roi_cls_loss.numpy(), roi_reg_loss.numpy())
 
             train_step(roi_model, roi_cls_loss + roi_reg_loss, tape, optimizer)
 
@@ -140,13 +139,10 @@ def train(rpn_model, rpn_training_model, roi_model, roi_training_model, dataset,
     train_writer = tf.contrib.summary.create_file_writer(train_dir, flush_millis=100000)
 
     for i in range(CONFIG['epochs']):
-        print('epoch %d starting...' % (i + 1))
-        start = time.time()
+        tf_logging.info('epoch %d starting...' % (i + 1))
         with train_writer.as_default(), summary.record_summaries_every_n_global_steps(50):
             train_one_epoch(rpn_model, rpn_training_model, roi_model, roi_training_model,
                             dataset, optimizer)
-        train_end = time.time()
-        print('epoch %d training finished, costing %d seconds, start evaluating...' % (i + 1, train_end - start))
 
 
 if __name__ == '__main__':

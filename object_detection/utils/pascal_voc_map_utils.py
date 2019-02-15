@@ -5,7 +5,7 @@ from collections import defaultdict
 import itertools
 import numpy as np
 import six
-from object_detection.utils.bbox_np import iou as bbox_iou
+from object_detection.utils.bbox_tf import pairwise_iou
 
 
 def eval_detection_voc(
@@ -191,7 +191,7 @@ def calc_detection_voc_prec_rec(
             gt_bbox_l = gt_bbox_l.copy()
             gt_bbox_l[:, 2:] += 1
 
-            iou = bbox_iou(pred_bbox_l, gt_bbox_l)
+            iou = pairwise_iou(pred_bbox_l, gt_bbox_l).numpy()
             gt_index = iou.argmax(axis=1)
             # set -1 if there is no matching ground truth
             gt_index[iou.max(axis=1) < iou_thresh] = -1

@@ -27,12 +27,12 @@ def _parse_tf_records(serialized_example):
                                                  'image/object/class/text': tf.VarLenFeature(tf.string),
                                                  }
                                        )
-    features['image/object/bbox/xmin'] = tf.sparse.to_dense(features['image/object/bbox/xmin'])
-    features['image/object/bbox/xmax'] = tf.sparse.to_dense(features['image/object/bbox/xmax'])
-    features['image/object/bbox/ymin'] = tf.sparse.to_dense(features['image/object/bbox/ymin'])
-    features['image/object/bbox/ymax'] = tf.sparse.to_dense(features['image/object/bbox/ymax'])
-    features['image/object/class/label'] = tf.sparse.to_dense(features['image/object/class/label'])
-    features['image/object/class/text'] = tf.sparse.to_dense(features['image/object/class/text'], '')
+    features['image/object/bbox/xmin'] = tf.sparse_tensor_to_dense(features['image/object/bbox/xmin'])
+    features['image/object/bbox/xmax'] = tf.sparse_tensor_to_dense(features['image/object/bbox/xmax'])
+    features['image/object/bbox/ymin'] = tf.sparse_tensor_to_dense(features['image/object/bbox/ymin'])
+    features['image/object/bbox/ymax'] = tf.sparse_tensor_to_dense(features['image/object/bbox/ymax'])
+    features['image/object/class/label'] = tf.sparse_tensor_to_dense(features['image/object/class/label'])
+    features['image/object/class/text'] = tf.sparse_tensor_to_dense(features['image/object/class/text'], '')
     image = tf.image.decode_jpeg(features['image/encoded'][0])
     bboxes = tf.transpose(tf.stack((features['image/object/bbox/ymin'],
                                     features['image/object/bbox/xmin'],
@@ -87,15 +87,18 @@ def _caffe_preprocessing(image):
     :param image:
     :return:
     """
-    # image = tf.to_float(image)
-    # image = image[..., ::-1]
-    # means = [103.939, 116.779, 123.68]
-    # channels = tf.split(axis=-1, num_or_size_splits=3, value=image)
-    # for i in range(3):
-    #     channels[i] -= means[i]
-    # return tf.concat(axis=-1, values=channels)
 
-    return tf.keras.applications.vgg16.preprocess_input(image)
+    # 使用下面方法会碰到奇怪的问题：构建第二个 dataset 时报错
+    # AttributeError: 'Tensor' object has no attribute '_datatype_enum'
+    # return tf.keras.applications.vgg16.preprocess_input(image)
+
+    image = tf.to_float(image)
+    image = image[..., ::-1]
+    means = [103.939, 116.779, 123.68]
+    channels = tf.split(axis=-1, num_or_size_splits=3, value=image)
+    for i in range(3):
+        channels[i] -= means[i]
+    return tf.concat(axis=-1, values=channels)
 
 
 def _tf_preprocessing(image):
@@ -236,7 +239,6 @@ if __name__ == '__main__':
         image_with_bboxes = draw_bboxes_with_labels(cur_image / 255, tf.squeeze(cur_bboxes, axis=0),
                                                     tf.squeeze(cur_labels_text, axis=0))
         plt.imshow(image_with_bboxes)
-        print(image_with_bboxes.shape)
         plt.show()
         if idx == 5:
             break

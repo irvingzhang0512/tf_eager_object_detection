@@ -6,7 +6,7 @@ def cls_loss(logits, labels, weight=1):
 
     :param weight:
     :param logits: [num_anchors, 2]
-    :param labels: [num_anchors, ]，取值[0, num_classes)
+    :param labels: [num_anchors, ]，取值[0, num_classes)(roi training) 或 [0, 1](rpn training)
     :return:
     """
     return tf.losses.sparse_softmax_cross_entropy(logits=logits, labels=tf.to_int32(labels),

@@ -21,7 +21,7 @@ def get_default_faster_rcnn_config():
         # training configs
         'learning_rate_start': 1e-3,
         'optimizer_momentum': 0.9,
-        'learning_rate_decay_steps': 9 * 5700,
+        'learning_rate_decay_steps': 9 * 5000,
         'learning_rate_decay_rate': 0.1,
         'weight_decay': 0.0005,
         'epochs': 14,
@@ -45,7 +45,7 @@ def get_default_faster_rcnn_config():
         'roi_head_keep_dropout_rate': 0.5,
         'roi_cls_loss_weight': 1.0,
         'roi_reg_loss_weight': 1.0,
-        'roi_sigma': 3.0,
+        'roi_sigma': 1.0,
         'roi_pos_iou_threshold': 0.5,
         'roi_neg_iou_threshold': 0.5,
         'roi_total_sample_number': 128,

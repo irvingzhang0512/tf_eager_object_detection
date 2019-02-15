@@ -1,7 +1,10 @@
 import tensorflow as tf
 from object_detection.utils.bbox_tf import pairwise_iou
+from tensorflow.python.platform import tf_logging
 
 layers = tf.keras.layers
+
+__all__ = ['RoiHead', 'RoiPooling', 'RoiTrainingProposal']
 
 
 def crop_and_resize(image, boxes, box_ind, crop_size, pad_border=True):
@@ -48,7 +51,7 @@ def crop_and_resize(image, boxes, box_ind, crop_size, pad_border=True):
     ret = tf.image.crop_and_resize(
         image, boxes, tf.cast(box_ind, tf.int32),
         crop_size=[crop_size, crop_size])
-    ret = tf.transpose(ret, [0, 3, 1, 2])   # ncss
+    ret = tf.transpose(ret, [0, 3, 1, 2])  # ncss
     return ret
 
 
@@ -92,33 +95,34 @@ class RoiPooling(tf.keras.Model):
 
         # # TODO: ROI Polling 的细节
 
-        # 方法一
-        res = []
-        for roi in rois:
-            ymin = tf.to_int32(roi[0])
-            xmin = tf.to_int32(roi[1])
-            ymax = tf.to_int32(roi[2])
-            xmax = tf.to_int32(roi[3])
-            res.append(
-                tf.image.resize_bilinear(shared_layers[:, ymin:ymax + 1, xmin:xmax + 1, :],
-                                         [self._pool_size, self._pool_size]))
-        net = self._concat_layer(res)
-        net = self._flatten_layer(net)
-        return tf.stop_gradient(net)
-
-        # # 方法二
-        # # roi align copy from https://github.com/tensorpack/tensorpack/blob/master/examples/FasterRCNN/model_box.py
-        # h, w = shared_layers.get_shape().as_list()[1:3]
-        # roi_channels = tf.split(rois, 4, axis=1)
-        # rois = tf.concat([
-        #     roi_channels[0]/tf.to_float(h),
-        #     roi_channels[1]/tf.to_float(w),
-        #     roi_channels[2]/tf.to_float(h),
-        #     roi_channels[3]/tf.to_float(w),
-        # ], axis=1)
-        #
-        # net = self._flatten_layer(roi_align(shared_layers, rois, self._pool_size))
+        # # 方法一
+        # res = []
+        # for roi in rois:
+        #     ymin = tf.to_int32(roi[0])
+        #     xmin = tf.to_int32(roi[1])
+        #     ymax = tf.to_int32(roi[2])
+        #     xmax = tf.to_int32(roi[3])
+        #     res.append(
+        #         tf.image.resize_bilinear(shared_layers[:, ymin:ymax + 1, xmin:xmax + 1, :],
+        #                                  [self._pool_size, self._pool_size]))
+        # net = self._concat_layer(res)
+        # net = self._flatten_layer(net)
         # return tf.stop_gradient(net)
+
+        # 方法二
+        # roi align copy from https://github.com/tensorpack/tensorpack/blob/master/examples/FasterRCNN/model_box.py
+        h, w = shared_layers.get_shape().as_list()[1:3]
+        roi_channels = tf.split(rois, 4, axis=1)
+        rois = tf.concat([
+            roi_channels[0] / tf.to_float(h),
+            roi_channels[1] / tf.to_float(w),
+            roi_channels[2] / tf.to_float(h),
+            roi_channels[3] / tf.to_float(w),
+        ], axis=1)
+
+        net = self._flatten_layer(roi_align(shared_layers, rois, self._pool_size))
+        print(rois)
+        return tf.stop_gradient(net)
 
 
 class RoiHead(tf.keras.Model):
@@ -163,8 +167,8 @@ class RoiHead(tf.keras.Model):
         net = self._dropout1(net, training)
         net = self._fc2(net)
         net = self._dropout2(net, training)
-        roi_score = self._score_prediction(net)
-        roi_bboxes_txtytwth = self._bbox_prediction(net)
+        roi_score = tf.reshape(self._score_prediction(net), [-1, self._num_classes])
+        roi_bboxes_txtytwth = tf.reshape(self._bbox_prediction(net), [-1, self._num_classes, 4])
 
         return roi_score, roi_bboxes_txtytwth
 
@@ -210,7 +214,7 @@ class RoiTrainingProposal(tf.keras.Model):
         max_scores = tf.reduce_max(iou, axis=1)
         gt_bbox_idx = tf.argmax(iou, axis=1)
         labels = tf.where(max_scores >= self._pos_iou_threshold, tf.ones_like(labels), labels)
-        labels = tf.where(max_scores <= self._neg_iou_threshold, tf.zeros_like(labels), labels)
+        labels = tf.where(max_scores < self._neg_iou_threshold, tf.zeros_like(labels), labels)
 
         # 计算正反例真实数量
         total_pos_num = tf.reduce_sum(tf.where(tf.equal(labels, 1), tf.ones_like(labels), tf.zeros_like(labels)))
@@ -219,7 +223,7 @@ class RoiTrainingProposal(tf.keras.Model):
         # 根据要求，修正正反例数量
         cur_pos_num = tf.minimum(total_pos_num, self._max_pos_samples)
         cur_neg_num = tf.minimum(self._total_num_samples - cur_pos_num, total_neg_num)
-        # print('roi training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
+        tf_logging.info('roi training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
 
         # 随机选择正例和反例
         total_pos_index = tf.squeeze(tf.where(tf.equal(labels, 1)), axis=1)

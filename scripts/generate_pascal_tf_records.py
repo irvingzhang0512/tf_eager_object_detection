@@ -52,7 +52,6 @@ def main(args):
     label_map_dict = label_map_utils.get_label_map_dict(args.label_map_path)
     with open(os.path.join(args.data_root_path, 'ImageSets', 'Main', 'aeroplane_%s.txt' % args.mode), 'r') as f:
         lines = f.readlines()
-    print(len(lines))
     examples_list = [line.strip().split(' ')[0] for line in lines]
     annotations_dir = os.path.join(args.data_root_path, 'Annotations')
     for idx, example in enumerate(tqdm(examples_list)):
