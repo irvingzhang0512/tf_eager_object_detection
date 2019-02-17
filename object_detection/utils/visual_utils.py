@@ -61,8 +61,8 @@ def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', fig
     else:
         raise ValueError('unknown preprocess_type {}'.format(preprocess_type))
     image_with_bboxes = draw_bboxes_with_labels(image, bboxes, labels_text)
-    # plt.figure(figsize=figsize)
-    # plt.imshow(image_with_bboxes)
-    # plt.show()
+    plt.figure(figsize=figsize)
+    plt.imshow(image_with_bboxes)
+    plt.show()
 
     return image_with_bboxes

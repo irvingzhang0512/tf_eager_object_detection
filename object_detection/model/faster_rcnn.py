@@ -325,7 +325,6 @@ class RoiTrainingModel(tf.keras.Model):
         # cal roi cls loss
         roi_training_score = tf.gather(roi_score, roi_training_idx)
         roi_training_score_label = tf.gather(gt_labels, roi_training_gt_bbox_idx) * roi_training_labels
-        print(roi_training_score_label)
         roi_cls_loss = cls_loss(logits=roi_training_score,
                                 labels=roi_training_score_label,
                                 weight=self._cls_loss_weight)

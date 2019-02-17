@@ -121,7 +121,6 @@ class RoiPooling(tf.keras.Model):
         ], axis=1)
 
         net = self._flatten_layer(roi_align(shared_layers, rois, self._pool_size))
-        print(rois)
         return tf.stop_gradient(net)
 
 
@@ -223,7 +222,7 @@ class RoiTrainingProposal(tf.keras.Model):
         # 根据要求，修正正反例数量
         cur_pos_num = tf.minimum(total_pos_num, self._max_pos_samples)
         cur_neg_num = tf.minimum(self._total_num_samples - cur_pos_num, total_neg_num)
-        tf_logging.info('roi training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
+        # tf_logging.info('roi training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
 
         # 随机选择正例和反例
         total_pos_index = tf.squeeze(tf.where(tf.equal(labels, 1)), axis=1)

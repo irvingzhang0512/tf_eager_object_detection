@@ -135,13 +135,19 @@ def _get_training_dataset(preprocessing_type='caffe'):
     #                    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
     #                    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
     #                    ]
-    tf_records_list = [
-        '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
-        '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
-        '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
-        '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
-        '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
-        ]
+    # tf_records_list = [
+    #     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
+    #     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
+    #     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
+    #     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
+    #     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
+    #     ]
+    tf_records_list = ['D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_00.tfrecords',
+                       'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_01.tfrecords'
+                       'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_02.tfrecords'
+                       'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_03.tfrecords'
+                       'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_04.tfrecords'
+                       ]
     return get_dataset(tf_records_list,
                        preprocessing_type=preprocessing_type,
                        min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'])
@@ -154,18 +160,17 @@ def _get_evaluating_dataset(preprocessing_type='caffe'):
     #                    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
     #                    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
     #                    ]
-    # tf_records_list = ['/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
-    #                    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
-    #                    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
-    #                    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
-    #                    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
-    #                    ]
-    tf_records_list = ['/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
-                       '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
-                       '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
-                       '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
-                       '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
+    tf_records_list = ['D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_00.tfrecords',
+                       'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_01.tfrecords'
+                       'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_02.tfrecords'
+                       'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_03.tfrecords'
+                       'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_04.tfrecords'
                        ]
+    # tf_records_list = ['/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_00
+    # .tfrecords', '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
+    # '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
+    # '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
+    # '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords', ]
     return get_dataset(tf_records_list,
                        min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
                        preprocessing_type=preprocessing_type,
