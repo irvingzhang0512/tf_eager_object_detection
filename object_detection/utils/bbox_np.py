@@ -2,6 +2,9 @@
 import numpy as np
 
 
+__all__ = ['pairwise_iou', 'ioa', 'bboxes_clip_filter', 'bboxes_range_filter']
+
+
 def area(boxes):
     """Computes area of boxes.
     Args:
@@ -36,7 +39,7 @@ def intersection(boxes1, boxes2):
     return intersect_heights * intersect_widths
 
 
-def iou(boxes1, boxes2):
+def pairwise_iou(boxes1, boxes2):
     """Computes pairwise intersection-over-union between box collections.
     Args:
       boxes1: a numpy array with shape [N, 4] holding N boxes.
@@ -66,3 +69,47 @@ def ioa(boxes1, boxes2):
     intersect = intersection(boxes1, boxes2)
     inv_areas = np.expand_dims(1.0 / area(boxes2), axis=0)
     return intersect * inv_areas
+
+
+def bboxes_clip_filter(rpn_proposals, min_value, max_height, max_width, min_edge=None):
+    """
+    numpy 操作
+    根据边界、最小边长过滤 proposals
+    :param rpn_proposals:           bboxes
+    :param min_value:
+    :param max_height:
+    :param max_width:
+    :param min_edge:
+    :return:
+    """
+    rpn_proposals[rpn_proposals < min_value] = min_value
+    rpn_proposals[:, ::2][rpn_proposals[:, ::2] > max_height] = max_height
+    rpn_proposals[:, 1::2][rpn_proposals[:, 1::2] > max_width] = max_width
+
+    if min_edge is None:
+        return rpn_proposals, np.arange(len(rpn_proposals))
+
+    new_rpn_proposals = []
+    rpn_proposals_idx = []
+    for idx, (ymin, xmin, ymax, xmax) in enumerate(rpn_proposals):
+        if (ymax - ymin) >= min_edge and (xmax - xmin) >= min_edge:
+            new_rpn_proposals.append([ymin, xmin, ymax, xmax])
+            rpn_proposals_idx.append(idx)
+    return np.array(new_rpn_proposals), np.array(rpn_proposals_idx)
+
+
+def bboxes_range_filter(anchors, max_height, max_width):
+    """
+    过滤 anchors，超出图像范围的 anchors 都不要
+    :param anchors:
+    :param max_height:
+    :param max_width:
+    :return:
+    """
+    index_inside = np.where(
+        (anchors[:, 0] >= 0) &
+        (anchors[:, 1] >= 0) &
+        (anchors[:, 2] <= max_height) &
+        (anchors[:, 3] <= max_width)
+    )[0]
+    return index_inside

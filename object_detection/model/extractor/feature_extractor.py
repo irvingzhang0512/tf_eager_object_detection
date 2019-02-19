@@ -85,11 +85,7 @@ class Vgg16Extractor(tf.keras.Model):
                           padding='same',
                           name='block5_conv3')(x)
 
-        self.fc1 = layers.Dense(4096, activation='relu', name='fc1', trainable=True)
-        self.fc2 = layers.Dense(4096, activation='relu', name='fc2', trainable=True)
-
         model = tf.keras.Model(img_input, x, name='vgg16')
-
         # weights_path = tf.keras.utils.get_file(
         #     'vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5',
         #     VGG_16_WEIGHTS_PATH_NO_TOP,
@@ -101,8 +97,8 @@ class Vgg16Extractor(tf.keras.Model):
             VGG_16_WEIGHTS_PATH,
             cache_subdir='models',
             file_hash='64373286793e3c8b2b4e3219cbf3544b')
-
         model.load_weights(weights_path, by_name=True)
+
         self._model = model
 
     def call(self, inputs, training=None, mask=None):

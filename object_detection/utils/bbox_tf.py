@@ -1,5 +1,7 @@
-# copy from https://github.com/tensorpack/tensorpack/blob/master/examples/FasterRCNN/utils/box_ops.py
 import tensorflow as tf
+
+
+__all__ = ['pairwise_iou', 'bboxes_clip_filter', 'bboxes_range_filter']
 
 
 def area(boxes):
@@ -34,6 +36,7 @@ def pairwise_intersection(boxlist1, boxlist2):
 
 def pairwise_iou(boxlist1, boxlist2):
     """Computes pairwise intersection-over-union between box collections.
+    copy from https://github.com/tensorpack/tensorpack/blob/master/examples/FasterRCNN/utils/box_ops.py
     Args:
       boxlist1: Nx4 floatbox
       boxlist2: Mx4
@@ -51,3 +54,51 @@ def pairwise_iou(boxlist1, boxlist2):
     return tf.where(
         tf.equal(intersections, 0.0),
         tf.zeros_like(intersections), tf.truediv(intersections, unions))
+
+
+def bboxes_clip_filter(rpn_proposals, min_value, max_height, max_width, min_edge=None):
+    """
+    numpy 操作
+    根据边界、最小边长过滤 proposals
+    :param rpn_proposals:           bboxes
+    :param min_value:
+    :param max_height:
+    :param max_width:
+    :param min_edge:
+    :return:
+    """
+    rpn_proposals = tf.where(rpn_proposals < min_value, tf.ones_like(rpn_proposals) * min_value, rpn_proposals)
+
+    channels = tf.split(rpn_proposals, 4, axis=1)
+    channels[0] = tf.where(channels[0] > max_height, tf.ones_like(channels[0]) * max_height, channels[0])
+    channels[1] = tf.where(channels[1] > max_width, tf.ones_like(channels[1]) * max_width, channels[1])
+    channels[2] = tf.where(channels[2] > max_height, tf.ones_like(channels[2]) * max_height, channels[2])
+    channels[3] = tf.where(channels[3] > max_width, tf.ones_like(channels[3]) * max_width, channels[3])
+
+    if min_edge is None:
+        rpn_proposals = tf.concat(channels, axis=1)
+        return rpn_proposals, tf.range(rpn_proposals.shape[0])
+
+    min_edge = tf.to_float(min_edge)
+    y_len = tf.to_float(channels[2] - channels[0])
+    x_len = tf.to_float(channels[3] - channels[1])
+    rpn_proposals_idx = tf.where(tf.logical_and(x_len >= min_edge, y_len >= min_edge))
+    rpn_proposals_idx = rpn_proposals_idx[:, 0]
+    return tf.gather(rpn_proposals, rpn_proposals_idx), rpn_proposals_idx
+
+
+def bboxes_range_filter(anchors, max_height, max_width):
+    """
+    过滤 anchors，超出图像范围的 anchors 都不要
+    :param anchors:
+    :param max_height:
+    :param max_width:
+    :return:
+    """
+    index_inside = tf.where(
+        tf.logical_and(
+            tf.logical_and((anchors[:, 0] >= 0), (anchors[:, 1] >= 0)),
+            tf.logical_and((anchors[:, 2] <= max_height), (anchors[:, 3] <= max_width)),
+        )
+    )[:, 0]
+    return index_inside

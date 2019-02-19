@@ -65,8 +65,6 @@ def _get_rpn_default_model(extractor):
         num_classes=CONFIG['num_classes'],
     )
     training_model = RpnTrainingModel(
-        cls_loss_weight=CONFIG['rpn_cls_loss_weight'],
-        reg_loss_weight=CONFIG['rpn_reg_loss_weight'],
         sigma=CONFIG['rpn_sigma'],
         rpn_training_pos_iou_threshold=CONFIG['rpn_pos_iou_threshold'],
         rpn_training_neg_iou_threshold=CONFIG['rpn_neg_iou_threshold'],
@@ -76,9 +74,8 @@ def _get_rpn_default_model(extractor):
     return base_model, training_model
 
 
-def _get_roi_default_model(extractor):
+def _get_roi_default_model():
     base_model = BaseRoiModel(
-        extractor,
         extractor_stride=CONFIG['extractor_stride'],
         weight_decay=CONFIG['weight_decay'],
         roi_pool_size=CONFIG['roi_pooling_size'],
@@ -87,8 +84,6 @@ def _get_roi_default_model(extractor):
     )
     training_model = RoiTrainingModel(
         num_classes=CONFIG['num_classes'],
-        cls_loss_weight=CONFIG['roi_cls_loss_weight'],
-        reg_loss_weight=CONFIG['roi_reg_loss_weight'],
         sigma=CONFIG['roi_sigma'],
         roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
         roi_training_neg_iou_threshold=CONFIG['roi_neg_iou_threshold'],
@@ -148,7 +143,7 @@ def train(rpn_model, rpn_training_model, roi_model, roi_training_model, dataset,
 if __name__ == '__main__':
     vgg16_extractor = Vgg16Extractor()
     base_rpn_model, rpn_training = _get_rpn_default_model(vgg16_extractor)
-    base_roi_model, roi_training = _get_roi_default_model(vgg16_extractor)
+    base_roi_model, roi_training = _get_roi_default_model()
     train(base_rpn_model, rpn_training,
           base_roi_model, roi_training,
           _get_training_dataset(), _get_default_optimizer())

@@ -12,7 +12,8 @@ def get_default_faster_rcnn_config():
         'evaluate_iou_threshold': 0.5,  # 计算map时使用，pred与gt的iou大于该阈值，则当前pred为TP，否则为FP
         'max_objects_per_class_per_image': 5,
         'max_objects_per_image': 15,
-        'predictions_nms_iou_threshold': 0.5,
+        'predictions_nms_iou_threshold': 0.3,
+        'prediction_score_threshold': 0.05,
 
         # anchors configs
         'ratios': [0.5, 1.0, 2.0],
@@ -27,8 +28,8 @@ def get_default_faster_rcnn_config():
         'epochs': 14,
 
         # rpn net configs
-        'rpn_cls_loss_weight': 1.0,
-        'rpn_reg_loss_weight': 1.0,
+        'rpn_proposal_means': [0, 0, 0, 0],
+        'rpn_proposal_stds': [1.0, 1.0, 1.0, 1.0],
         'rpn_sigma': 3.0,
         'rpn_pos_iou_threshold': 0.7,
         'rpn_neg_iou_threshold': 0.3,
@@ -41,13 +42,14 @@ def get_default_faster_rcnn_config():
         'rpn_proposal_nms_iou_threshold': 0.7,
 
         # roi net configs
+        'roi_proposal_means': [0, 0, 0, 0],
+        'roi_proposal_stds': [1.0, 1.0, 1.0, 1.0],
+        'roi_feature_size': 7*7*512,
         'roi_pooling_size': 7,
         'roi_head_keep_dropout_rate': 0.5,
-        'roi_cls_loss_weight': 1.0,
-        'roi_reg_loss_weight': 1.0,
         'roi_sigma': 1.0,
         'roi_pos_iou_threshold': 0.5,
-        'roi_neg_iou_threshold': 0.5,
+        'roi_neg_iou_threshold': 0.1,
         'roi_total_sample_number': 128,
         'roi_pos_sample_max_number': 32,
 
