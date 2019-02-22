@@ -83,6 +83,7 @@ class RoiPooling(tf.keras.Model):
         self._pool_size = pool_size
         self._concat_layer = layers.Concatenate(axis=0)
         self._flatten_layer = layers.Flatten()
+        self._max_pool = layers.MaxPooling2D()
 
     def call(self, inputs, training=None, mask=None):
         """
@@ -113,11 +114,11 @@ class RoiPooling(tf.keras.Model):
         # net = self._flatten_layer(net)
         # return tf.stop_gradient(net)
 
-        # 方法二
-        # roi align copy from https://github.com/tensorpack/tensorpack/blob/master/examples/FasterRCNN/model_box.py
-        net = roi_align(shared_layers, rois, self._pool_size)
-        net = self._flatten_layer(net)
-        return tf.stop_gradient(net)
+        # # 方法二
+        # # roi align copy from https://github.com/tensorpack/tensorpack/blob/master/examples/FasterRCNN/model_box.py
+        # net = roi_align(shared_layers, rois, self._pool_size)
+        # net = self._flatten_layer(net)
+        # return tf.stop_gradient(net)
 
         # # 方法三
         # h, w = shared_layers.get_shape().as_list()[1:3]
@@ -135,6 +136,22 @@ class RoiPooling(tf.keras.Model):
         # net = self._flatten_layer(net)
         # return tf.stop_gradient(net)
 
+        # 方法四
+        # tf-faster-rcnn 中借鉴
+        batch_ids = tf.zeros([tf.shape(rois)[0]], dtype=tf.int32)
+        h, w = shared_layers.get_shape().as_list()[1:3]
+        roi_channels = tf.split(rois, 4, axis=1)
+        bboxes = tf.concat([
+            roi_channels[0] / tf.to_float(h),
+            roi_channels[1] / tf.to_float(w),
+            roi_channels[2] / tf.to_float(h),
+            roi_channels[3] / tf.to_float(w),
+        ], axis=1)
+        pre_pool_size = self._pool_size * 2
+        crops = tf.image.crop_and_resize(shared_layers, bboxes, tf.to_int32(batch_ids), [pre_pool_size, pre_pool_size],
+                                         name="crops")
+        return tf.stop_gradient(self._flatten_layer(self._max_pool(crops)))
+
 
 class RoiHead(tf.keras.Model):
     def __init__(self, num_classes,
@@ -143,37 +160,36 @@ class RoiHead(tf.keras.Model):
         super().__init__()
         self._num_classes = num_classes
 
-        roi_feature_input = layers.Input([roi_feature_size])
-
-        x = layers.Dense(4096, name='fc1', activation='relu',
-                         kernel_initializer=tf.random_normal_initializer(0, 0.01),
-                         kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
-                         )(roi_feature_input)
-        x = layers.Dropout(rate=1 - keep_rate)(x)
-        x = layers.Dense(4096, name='fc2', activation='relu',
-                         kernel_initializer=tf.random_normal_initializer(0, 0.01),
-                         kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
-                         )(x)
-        x = layers.Dropout(rate=1 - keep_rate)(x)
-
-        roi_score = layers.Dense(num_classes, name='roi_head_score', activation=None,
+        self._fc1 = layers.Dense(4096, name='fc1', activation='relu',
                                  kernel_initializer=tf.random_normal_initializer(0, 0.01),
-                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(x)
-        roi_bboxes_txtytwth = layers.Dense(4 * num_classes, name='roi_head_bboxes', activation=None,
-                                           kernel_initializer=tf.random_normal_initializer(0, 0.001),
-                                           kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(x)
-        roi_bboxes_txtytwth = layers.Reshape([num_classes, 4])(roi_bboxes_txtytwth)
+                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                 input_shape=[roi_feature_size]
+                                 )
+        self._dropout1 = layers.Dropout(rate=1 - keep_rate)
 
-        model = tf.keras.Model(roi_feature_input, [roi_score, roi_bboxes_txtytwth])
+        self._fc2 = layers.Dense(4096, name='fc2', activation='relu',
+                                 kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                 )
+        self._dropout2 = layers.Dropout(rate=1 - keep_rate)
+
+        self._score_layer = layers.Dense(num_classes, name='roi_head_score', activation=None,
+                                         kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                                         kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        self._roi_bboxes_layer = layers.Dense(4 * num_classes, name='roi_head_bboxes', activation=None,
+                                              kernel_initializer=tf.random_normal_initializer(0, 0.001),
+                                              kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        self._roi_bboxes_reshape_layer = layers.Reshape([num_classes, 4])
+
+        self.build((None, roi_feature_size))
         weights_path = tf.keras.utils.get_file(
             'vgg16_weights_tf_dim_ordering_tf_kernels.h5',
             VGG_16_WEIGHTS_PATH,
             cache_subdir='models',
             file_hash='64373286793e3c8b2b4e3219cbf3544b')
-        model.load_weights(weights_path, by_name=True)
-        self._model = model
+        self.load_weights(weights_path, by_name=True)
 
-    def call(self, inputs, training=None, mask=None):
+    def call(self, inputs, training=None):
         """
         输入 roi pooling 的结果
         对每个 roi pooling 的结果进行预测（预测bboxes）
@@ -182,7 +198,14 @@ class RoiHead(tf.keras.Model):
         :param mask:
         :return:
         """
-        return self._model(inputs, training, mask)
+        x = self._fc1(inputs)
+        x = self._dropout1(x, training)
+        x = self._fc2(x)
+        x = self._dropout2(x, training)
+        score = self._score_layer(x)
+        bboxes = self._roi_bboxes_reshape_layer(self._roi_bboxes_layer(x))
+
+        return score, bboxes
 
 
 class RoiTrainingProposal(tf.keras.Model):
@@ -236,7 +259,8 @@ class RoiTrainingProposal(tf.keras.Model):
         max_ious = tf.reduce_max(iou, axis=1)
         gt_bbox_idx = tf.argmax(iou, axis=1)
         labels = tf.where(max_ious >= self._pos_iou_threshold, tf.ones_like(labels), labels)
-        labels = tf.where(max_ious < self._neg_iou_threshold, tf.zeros_like(labels), labels)
+        labels = tf.where(tf.logical_and(max_ious > self._neg_iou_threshold,
+                                         max_ious < self._pos_iou_threshold), tf.zeros_like(labels), labels)
 
         # 筛选正例和反例
         pos_index = tf.where(tf.equal(labels, 1))[:, 0]

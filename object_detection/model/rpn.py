@@ -96,10 +96,6 @@ class RPNTrainingProposal(tf.keras.Model):
         anchors, gt_bboxes, image_shape = inputs
 
         # 1. 对 anchors 进行过滤，筛选符合边界要求的 anchor，之后操作都基于筛选后的结果。
-        # # np 实现
-        # selected_anchor_idx = _anchors_filter(anchors, image_shape[0], image_shape[1])
-        # anchors = anchors[selected_anchor_idx]
-        # tf实现
         tf_logging.debug('rpn training, before filter has %d anchors' % anchors.shape[0])
         selected_anchor_idx = bboxes_range_filter(anchors, image_shape[0], image_shape[1])
         anchors = tf.gather(anchors, selected_anchor_idx)
@@ -207,8 +203,6 @@ class RPNProposal(tf.keras.Model):
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, selected_idx = bboxes_clip_filter(decoded_bboxes,
                                                           0, image_shape[0], image_shape[1], extractor_stride)
-        # decoded_bboxes, selected_idx = proposal_filter(decoded_bboxes,
-        #                                                0, image_shape[0], image_shape[1], extractor_stride)
         scores = tf.gather(scores, selected_idx)
         tf_logging.debug('rpn after filter has %d proposals' % tf.size(selected_idx))
 

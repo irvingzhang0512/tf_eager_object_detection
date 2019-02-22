@@ -5,7 +5,7 @@ def get_default_faster_rcnn_config():
         'extractor_stride': 16,
 
         # preprocessing configs
-        'image_max_size': 2000,
+        'image_max_size': 1000,
         'image_min_size': 600,
 
         # predict & evaluate configs
@@ -13,18 +13,18 @@ def get_default_faster_rcnn_config():
         'max_objects_per_class_per_image': 5,
         'max_objects_per_image': 15,
         'predictions_nms_iou_threshold': 0.3,
-        'prediction_score_threshold': 0.05,
+        'prediction_score_threshold': 0.0,
 
         # anchors configs
         'ratios': [0.5, 1.0, 2.0],
-        'scales': [4, 8, 16, 32],
+        'scales': [8, 16, 32],
 
         # training configs
         'learning_rate_start': 1e-3,
         'optimizer_momentum': 0.9,
         'learning_rate_decay_steps': 9 * 5000,
         'learning_rate_decay_rate': 0.1,
-        'weight_decay': 0.0005,
+        'weight_decay': 0.0001,
         'epochs': 14,
 
         # rpn net configs
@@ -43,7 +43,7 @@ def get_default_faster_rcnn_config():
 
         # roi net configs
         'roi_proposal_means': [0, 0, 0, 0],
-        'roi_proposal_stds': [1.0, 1.0, 1.0, 1.0],
+        'roi_proposal_stds': [0.1, 0.1, 0.2, 0.2],
         'roi_feature_size': 7*7*512,
         'roi_pooling_size': 7,
         'roi_head_keep_dropout_rate': 0.5,

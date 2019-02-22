@@ -13,79 +13,76 @@ RESNET_50_WEIGHTS_PATH_NO_TOP = ('https://github.com/fchollet/deep-learning-mode
                                  'resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5')
 
 
-class Vgg16Extractor(tf.keras.Model):
+class Vgg16Extractor(tf.keras.Sequential):
     def __init__(self):
-        super().__init__()
-
-        img_input = layers.Input(shape=(None, None, 3))
-
+        super().__init__(name='vgg16')
         # Block 1
-        x = layers.Conv2D(64, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block1_conv1', trainable=False)(img_input)
-        x = layers.Conv2D(64, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block1_conv2', trainable=False)(x)
-        x = layers.MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool')(x)
+        self.add(layers.Conv2D(64, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block1_conv1', trainable=False,
+                               input_shape=(None, None, 3)))
+        self.add(layers.Conv2D(64, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block1_conv2', trainable=False))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool'))
 
         # Block 2
-        x = layers.Conv2D(128, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block2_conv1', trainable=False)(x)
-        x = layers.Conv2D(128, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block2_conv2', trainable=False)(x)
-        x = layers.MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool')(x)
+        self.add(layers.Conv2D(128, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block2_conv1', trainable=False))
+        self.add(layers.Conv2D(128, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block2_conv2', trainable=False))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool'))
 
         # Block 3
-        x = layers.Conv2D(256, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block3_conv1')(x)
-        x = layers.Conv2D(256, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block3_conv2')(x)
-        x = layers.Conv2D(256, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block3_conv3')(x)
-        x = layers.MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool')(x)
+        self.add(layers.Conv2D(256, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block3_conv1'))
+        self.add(layers.Conv2D(256, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block3_conv2'))
+        self.add(layers.Conv2D(256, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block3_conv3'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool'))
 
         # Block 4
-        x = layers.Conv2D(512, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block4_conv1')(x)
-        x = layers.Conv2D(512, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block4_conv2')(x)
-        x = layers.Conv2D(512, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block4_conv3')(x)
-        x = layers.MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool')(x)
+        self.add(layers.Conv2D(512, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block4_conv1'))
+        self.add(layers.Conv2D(512, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block4_conv2'))
+        self.add(layers.Conv2D(512, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block4_conv3'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool'))
 
         # Block 5
-        x = layers.Conv2D(512, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block5_conv1')(x)
-        x = layers.Conv2D(512, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block5_conv2')(x)
-        x = layers.Conv2D(512, (3, 3),
-                          activation='relu',
-                          padding='same',
-                          name='block5_conv3')(x)
+        self.add(layers.Conv2D(512, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block5_conv1'))
+        self.add(layers.Conv2D(512, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block5_conv2'))
+        self.add(layers.Conv2D(512, (3, 3),
+                               activation='relu',
+                               padding='same',
+                               name='block5_conv3'))
 
-        model = tf.keras.Model(img_input, x, name='vgg16')
         # weights_path = tf.keras.utils.get_file(
         #     'vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5',
         #     VGG_16_WEIGHTS_PATH_NO_TOP,
@@ -97,12 +94,7 @@ class Vgg16Extractor(tf.keras.Model):
             VGG_16_WEIGHTS_PATH,
             cache_subdir='models',
             file_hash='64373286793e3c8b2b4e3219cbf3544b')
-        model.load_weights(weights_path, by_name=True)
-
-        self._model = model
-
-    def call(self, inputs, training=None, mask=None):
-        return self._model(inputs, training, mask)
+        self.load_weights(weights_path, by_name=True)
 
 
 def identity_block(input_tensor, kernel_size, filters, stage, block):

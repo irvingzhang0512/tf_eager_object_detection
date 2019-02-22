@@ -70,10 +70,14 @@ def bboxes_clip_filter(rpn_proposals, min_value, max_height, max_width, min_edge
     rpn_proposals = tf.where(rpn_proposals < min_value, tf.ones_like(rpn_proposals) * min_value, rpn_proposals)
 
     channels = tf.split(rpn_proposals, 4, axis=1)
-    channels[0] = tf.where(channels[0] > max_height, tf.ones_like(channels[0]) * max_height, channels[0])
-    channels[1] = tf.where(channels[1] > max_width, tf.ones_like(channels[1]) * max_width, channels[1])
-    channels[2] = tf.where(channels[2] > max_height, tf.ones_like(channels[2]) * max_height, channels[2])
-    channels[3] = tf.where(channels[3] > max_width, tf.ones_like(channels[3]) * max_width, channels[3])
+    channels[0] = tf.maximum(tf.minimum(channels[0], max_height), min_value)
+    channels[1] = tf.maximum(tf.minimum(channels[1], max_width), min_value)
+    channels[2] = tf.maximum(tf.minimum(channels[2], max_height), min_value)
+    channels[3] = tf.maximum(tf.minimum(channels[3], max_width), min_value)
+    # channels[0] = tf.where(channels[0] > max_height, tf.ones_like(channels[0]) * max_height, channels[0])
+    # channels[1] = tf.where(channels[1] > max_width, tf.ones_like(channels[1]) * max_width, channels[1])
+    # channels[2] = tf.where(channels[2] > max_height, tf.ones_like(channels[2]) * max_height, channels[2])
+    # channels[3] = tf.where(channels[3] > max_width, tf.ones_like(channels[3]) * max_width, channels[3])
 
     if min_edge is None:
         rpn_proposals = tf.concat(channels, axis=1)

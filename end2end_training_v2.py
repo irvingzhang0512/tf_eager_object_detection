@@ -2,21 +2,20 @@ import tensorflow as tf
 import os
 import time
 import matplotlib
+
 matplotlib.use('agg')
 from object_detection.model.vgg16_faster_rcnn import Vgg16FasterRcnn
 from object_detection.config.faster_rcnn_config import CONFIG
 from object_detection.utils.pascal_voc_map_utils import eval_detection_voc
 from object_detection.utils.visual_utils import show_one_image
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset
-
 from tensorflow.contrib.summary import summary
 from tensorflow.contrib.eager.python import saver as eager_saver
 from tqdm import tqdm
 from tensorflow.python.platform import tf_logging
 
-
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 tf.enable_eager_execution()
 
@@ -53,9 +52,9 @@ eval_records_list = [
     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
 ]
-cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-1'
-cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-1/val'
-cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-1'
+cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4'
+cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4/val'
+cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4'
 
 
 # train_records_list = [
@@ -196,10 +195,10 @@ def train_one_epoch(dataset, base_model, optimizer,
         gt_labels = tf.to_int32(tf.squeeze(gt_labels, axis=0))
         with tf.GradientTape() as tape:
             rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = base_model((image, gt_bboxes, gt_labels), True)
-            # l2_loss = tf.add_n(base_model.losses)
+            l2_loss = tf.add_n(base_model.losses)
             # total_loss = rpn_cls_loss + rpn_reg_loss
             # total_loss = roi_cls_loss + roi_reg_loss
-            total_loss = rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss
+            total_loss = rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss + l2_loss
             rpn_cls_mean.update(rpn_cls_loss)
             rpn_reg_mean.update(rpn_reg_loss)
             roi_cls_mean.update(roi_cls_loss)
@@ -213,7 +212,7 @@ def train_one_epoch(dataset, base_model, optimizer,
             summary.scalar("rpn_reg_loss", rpn_reg_mean.mean())
             summary.scalar("roi_cls_loss", roi_cls_mean.mean())
             summary.scalar("roi_reg_loss", roi_reg_mean.mean())
-            # summary.scalar("l2_loss", l2_loss)
+            summary.scalar("l2_loss", l2_loss)
             summary.scalar("total_loss", total_mean.mean())
 
         if idx % logging_every_n_steps == 0:
@@ -261,8 +260,8 @@ def evaluate(dataset, base_model, use_07_metric=False):
             pred_scores.append(cur_pred_scores.numpy())
         else:
             useless_pics += 1
-            print(useless_pics)
 
+    tf_logging.info('useless img number is {}'.format(useless_pics))
     return eval_detection_voc(
         pred_bboxes, pred_labels, pred_scores,
         gt_bboxes, gt_labels,
@@ -306,8 +305,8 @@ def train_eval(training_dataset, evaluating_dataset, base_model, optimizer,
                                                                                                  train_end - start))
         with val_writer.as_default():
             res = evaluate(evaluating_dataset, base_model)
-            tf_logging.info('epoch %d evaluating finished, costing %d seconds, '
-                            'current mAP is %.4f' % (i + 1, time.time() - train_end, res['map']))
+            tf_logging.info('epoch %d evaluating finished, costing %d seconds, ' % (i + 1, time.time() - train_end))
+            tf_logging.info('current ap is {}, current map is {}'.format(res['ap'], res['map']))
 
 
 if __name__ == '__main__':
