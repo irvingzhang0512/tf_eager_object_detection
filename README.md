@@ -52,9 +52,8 @@
 + [x] use `logging` instead of `print`.
 + [ ] add model load/save functions.
 + [ ] predict and visual scripts.
++ [ ] COCO dataset & training.
 
-
-## 3. 存在的问题
 
 
 

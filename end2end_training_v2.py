@@ -9,13 +9,14 @@ from object_detection.config.faster_rcnn_config import CONFIG
 from object_detection.utils.pascal_voc_map_utils import eval_detection_voc
 from object_detection.utils.visual_utils import show_one_image
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset
+# from object_detection.dataset.coco_tf_dataset_generator import get_dataset
 from tensorflow.contrib.summary import summary
 from tensorflow.contrib.eager.python import saver as eager_saver
 from tqdm import tqdm
 from tensorflow.python.platform import tf_logging
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 tf.enable_eager_execution()
 
@@ -38,42 +39,42 @@ tf.enable_eager_execution()
 # cur_ckpt_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs-new'
 
 
-train_records_list = [
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
-]
-eval_records_list = [
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
-]
-cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4'
-cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4/val'
-cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4'
-
-
 # train_records_list = [
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_00.tfrecords',
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_01.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_02.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_03.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_04.tfrecords'
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
 # ]
 # eval_records_list = [
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_00.tfrecords',
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_01.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_02.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_03.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_04.tfrecords'
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
 # ]
-# cur_train_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs'
-# cur_val_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs\\val'
-# cur_ckpt_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs'
+# cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4'
+# cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4/val'
+# cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-end2end-v2-4'
+
+
+train_records_list = [
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_00.tfrecords',
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_01.tfrecords'
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_02.tfrecords'
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_03.tfrecords'
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_04.tfrecords'
+]
+eval_records_list = [
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_00.tfrecords',
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_01.tfrecords'
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_02.tfrecords'
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_03.tfrecords'
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_04.tfrecords'
+]
+cur_train_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs-coco'
+cur_val_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs-coco\\val'
+cur_ckpt_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs-coco'
 
 
 def apply_gradients(model, optimizer, gradients):
