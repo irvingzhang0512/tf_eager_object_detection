@@ -5,7 +5,7 @@ from tensorflow.python.platform import tf_logging
 
 layers = tf.keras.layers
 
-__all__ = ['RPNHead', 'RPNTrainingProposal', 'RPNProposal']
+__all__ = ['RPNHead', 'AnchorTarget', 'RegionProosal']
 
 
 class RPNHead(tf.keras.Model):
@@ -50,7 +50,7 @@ class RPNHead(tf.keras.Model):
         return rpn_score_reshape, rpn_bbox_reshape
 
 
-class RPNTrainingProposal(tf.keras.Model):
+class AnchorTarget(tf.keras.Model):
     def __init__(self,
                  pos_iou_threshold=0.7,
                  neg_iou_threshold=0.3,
@@ -108,13 +108,13 @@ class RPNTrainingProposal(tf.keras.Model):
         # 3. 设置与 gt_bboxes 的 max_iou > pos_iou_threshold 的anchor为正例
         #    设置 max_iou < neg_iou_threshold 的anchor为反例。
         max_ious = tf.reduce_max(iou, axis=1)
-        argmax_ious = tf.argmax(iou, axis=1, output_type=tf.int32)
         labels = tf.where(max_ious >= self._pos_iou_threshold, tf.ones_like(labels), labels)
         labels = tf.where(max_ious < self._neg_iou_threshold, tf.zeros_like(labels), labels)
 
         # 4. 设置与每个 gt_bboxes 的iou最大的anchor为正例。
         # 获取与每个 gt_bboxes 的 iou 最大的anchor的编号，设置这些anchor为正例，并修改对应 argmax_ious
         # 想要实现 labels[gt_argmax_ious] = 1, argmax_ious[gt_argmax_ious] = np.arange(len(gt_argmax_ious))
+        argmax_ious = tf.argmax(iou, axis=1, output_type=tf.int32)
         gt_argmax_ious = tf.argmax(iou, axis=0, output_type=tf.int32)  # [gt_bboxes_size]
         labels = tf.scatter_update(tf.Variable(labels), gt_argmax_ious, 1)
         argmax_ious = tf.scatter_update(tf.Variable(argmax_ious), gt_argmax_ious, tf.range(0, tf.size(gt_argmax_ious)))
@@ -147,7 +147,7 @@ class RPNTrainingProposal(tf.keras.Model):
                tf.stop_gradient(rpn_gt_txtytwth), tf.stop_gradient(cur_pos_num)
 
 
-class RPNProposal(tf.keras.Model):
+class RegionProosal(tf.keras.Model):
     def __init__(self,
                  num_pre_nms_train=12000,
                  num_post_nms_train=2000,

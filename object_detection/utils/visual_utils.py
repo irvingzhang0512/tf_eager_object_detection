@@ -52,6 +52,8 @@ def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', fig
         bboxes = bboxes.numpy()
     if isinstance(labels_text, tf.Tensor):
         labels_text = labels_text.numpy()
+    # 因为原始数据中，将 bboxes 范围限定在 [0, height-1] [0, width - 1] 中，所以显示的时候，要要返回1
+    bboxes = np.array(bboxes) + 1
     if preprocess_type == 'caffe':
         cur_means = [103.939, 116.779, 123.68]
         image[..., 0] += cur_means[0]

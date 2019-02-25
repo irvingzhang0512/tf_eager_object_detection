@@ -18,13 +18,13 @@ def encode_bbox_with_mean_and_std(src_bbox, dst_bbox, target_means, target_stds)
     box = tf.cast(src_bbox, tf.float32)
     gt_box = tf.cast(dst_bbox, tf.float32)
 
-    height = box[..., 2] - box[..., 0]
-    width = box[..., 3] - box[..., 1]
+    height = box[..., 2] - box[..., 0] + 1.0
+    width = box[..., 3] - box[..., 1] + 1.0
     center_y = box[..., 0] + 0.5 * height
     center_x = box[..., 1] + 0.5 * width
 
-    gt_height = gt_box[..., 2] - gt_box[..., 0]
-    gt_width = gt_box[..., 3] - gt_box[..., 1]
+    gt_height = gt_box[..., 2] - gt_box[..., 0] + 1.0
+    gt_width = gt_box[..., 3] - gt_box[..., 1] + 1.0
     gt_center_y = gt_box[..., 0] + 0.5 * gt_height
     gt_center_x = gt_box[..., 1] + 0.5 * gt_width
 
@@ -55,8 +55,8 @@ def decode_bbox_with_mean_and_std(anchors, bboxes_txtytwth, target_means, target
         target_stds, dtype=tf.float32)
     delta = bboxes_txtytwth * target_stds + target_means
     # Convert to y, x, h, w
-    height = anchors[:, 2] - anchors[:, 0]
-    width = anchors[:, 3] - anchors[:, 1]
+    height = anchors[:, 2] - anchors[:, 0] + 1.0
+    width = anchors[:, 3] - anchors[:, 1] + 1.0
     center_y = anchors[:, 0] + 0.5 * height
     center_x = anchors[:, 1] + 0.5 * width
 
@@ -82,13 +82,13 @@ def encode_bbox(src_bbox, dst_bbox):
     :param dst_bbox: (N, 4), ymin xmin ymax xmax
     :return:
     """
-    height = src_bbox[:, 2] - src_bbox[:, 0]
-    width = src_bbox[:, 3] - src_bbox[:, 1]
+    height = src_bbox[:, 2] - src_bbox[:, 0] + 1.0
+    width = src_bbox[:, 3] - src_bbox[:, 1] + 1.0
     ctr_y = src_bbox[:, 0] + 0.5 * height
     ctr_x = src_bbox[:, 1] + 0.5 * width
 
-    base_height = dst_bbox[:, 2] - dst_bbox[:, 0]
-    base_width = dst_bbox[:, 3] - dst_bbox[:, 1]
+    base_height = dst_bbox[:, 2] - dst_bbox[:, 0] + 1.0
+    base_width = dst_bbox[:, 3] - dst_bbox[:, 1] + 1.0
     base_ctr_y = dst_bbox[:, 0] + 0.5 * base_height
     base_ctr_x = dst_bbox[:, 1] + 0.5 * base_width
 
@@ -114,8 +114,8 @@ def decode_bbox(anchors, bboxes_txtytwth):
     """
     src_bbox = anchors.astype(anchors.dtype, copy=False)
 
-    src_height = src_bbox[:, 2] - src_bbox[:, 0]
-    src_width = src_bbox[:, 3] - src_bbox[:, 1]
+    src_height = src_bbox[:, 2] - src_bbox[:, 0] + 1.0
+    src_width = src_bbox[:, 3] - src_bbox[:, 1] + 1.0
     src_ctr_y = src_bbox[:, 0] + 0.5 * src_height
     src_ctr_x = src_bbox[:, 1] + 0.5 * src_width
 

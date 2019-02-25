@@ -88,6 +88,11 @@ def preprocessing_func(image, bboxes, height, width, labels, labels_text,
     1) 短边最短为600，长边最长为2000，矛盾时，优先满足长边2000
     2) preprocessing
     3) 通过 preprocessing_type 选择 preprocessing 函数
+    :param preprocessing_type:
+    :param width:
+    :param height:
+    :param max_size:
+    :param min_size:
     :param image:
     :param bboxes:
     :param labels:
@@ -99,17 +104,17 @@ def preprocessing_func(image, bboxes, height, width, labels, labels_text,
     scale1 = min_size / tf.minimum(height, width)
     scale2 = max_size / tf.minimum(height, width)
     scale = tf.minimum(scale1, scale2)
-    n_height = scale * height
-    n_width = scale * width
+    n_height = tf.to_int32(scale * height)
+    n_width = tf.to_int32(scale * width)
 
     channels = tf.split(axis=-1, num_or_size_splits=4, value=bboxes)
-    channels[0] = channels[0] * n_height
-    channels[1] = channels[1] * n_width
-    channels[2] = channels[2] * n_height
-    channels[3] = channels[3] * n_width
+    channels[0] = channels[0] * tf.to_float(n_height - 1)
+    channels[1] = channels[1] * tf.to_float(n_width - 1)
+    channels[2] = channels[2] * tf.to_float(n_height - 1)
+    channels[3] = channels[3] * tf.to_float(n_width - 1)
     bboxes = tf.concat(channels, axis=-1)
 
-    image = tf.image.resize_bilinear(image, (tf.to_int32(n_height), tf.to_int32(n_width)))
+    image = tf.image.resize_bilinear(image, (n_height, n_width))
 
     if preprocessing_type == 'caffe':
         preprocessing_fn = _caffe_preprocessing

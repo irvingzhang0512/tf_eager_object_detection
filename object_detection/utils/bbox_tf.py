@@ -12,7 +12,7 @@ def area(boxes):
       n
     """
     x_min, y_min, x_max, y_max = tf.split(boxes, 4, axis=1)
-    return tf.squeeze((y_max - y_min) * (x_max - x_min), [1])
+    return tf.squeeze((y_max - y_min + 1.0) * (x_max - x_min + 1.0), [1])
 
 
 def pairwise_intersection(boxlist1, boxlist2):
@@ -27,10 +27,10 @@ def pairwise_intersection(boxlist1, boxlist2):
     x_min2, y_min2, x_max2, y_max2 = tf.split(boxlist2, 4, axis=1)
     all_pairs_min_ymax = tf.minimum(y_max1, tf.transpose(y_max2))
     all_pairs_max_ymin = tf.maximum(y_min1, tf.transpose(y_min2))
-    intersect_heights = tf.maximum(0.0, all_pairs_min_ymax - all_pairs_max_ymin)
+    intersect_heights = tf.maximum(0.0, all_pairs_min_ymax - all_pairs_max_ymin + 1.0)
     all_pairs_min_xmax = tf.minimum(x_max1, tf.transpose(x_max2))
     all_pairs_max_xmin = tf.maximum(x_min1, tf.transpose(x_min2))
-    intersect_widths = tf.maximum(0.0, all_pairs_min_xmax - all_pairs_max_xmin)
+    intersect_widths = tf.maximum(0.0, all_pairs_min_xmax - all_pairs_max_xmin + 1.0)
     return intersect_heights * intersect_widths
 
 
@@ -70,10 +70,10 @@ def bboxes_clip_filter(rpn_proposals, min_value, max_height, max_width, min_edge
     rpn_proposals = tf.where(rpn_proposals < min_value, tf.ones_like(rpn_proposals) * min_value, rpn_proposals)
 
     channels = tf.split(rpn_proposals, 4, axis=1)
-    channels[0] = tf.maximum(tf.minimum(channels[0], max_height), min_value)
-    channels[1] = tf.maximum(tf.minimum(channels[1], max_width), min_value)
-    channels[2] = tf.maximum(tf.minimum(channels[2], max_height), min_value)
-    channels[3] = tf.maximum(tf.minimum(channels[3], max_width), min_value)
+    channels[0] = tf.maximum(tf.minimum(channels[0], max_height - 1), min_value)
+    channels[1] = tf.maximum(tf.minimum(channels[1], max_width - 1), min_value)
+    channels[2] = tf.maximum(tf.minimum(channels[2], max_height - 1), min_value)
+    channels[3] = tf.maximum(tf.minimum(channels[3], max_width - 1), min_value)
     # channels[0] = tf.where(channels[0] > max_height, tf.ones_like(channels[0]) * max_height, channels[0])
     # channels[1] = tf.where(channels[1] > max_width, tf.ones_like(channels[1]) * max_width, channels[1])
     # channels[2] = tf.where(channels[2] > max_height, tf.ones_like(channels[2]) * max_height, channels[2])
@@ -84,8 +84,8 @@ def bboxes_clip_filter(rpn_proposals, min_value, max_height, max_width, min_edge
         return rpn_proposals, tf.range(rpn_proposals.shape[0])
 
     min_edge = tf.to_float(min_edge)
-    y_len = tf.to_float(channels[2] - channels[0])
-    x_len = tf.to_float(channels[3] - channels[1])
+    y_len = tf.to_float(channels[2] - channels[0] + 1.0)
+    x_len = tf.to_float(channels[3] - channels[1] + 1.0)
     rpn_proposals_idx = tf.where(tf.logical_and(x_len >= min_edge, y_len >= min_edge))
     rpn_proposals_idx = rpn_proposals_idx[:, 0]
     return tf.gather(rpn_proposals, rpn_proposals_idx), rpn_proposals_idx
@@ -102,7 +102,7 @@ def bboxes_range_filter(anchors, max_height, max_width):
     index_inside = tf.where(
         tf.logical_and(
             tf.logical_and((anchors[:, 0] >= 0), (anchors[:, 1] >= 0)),
-            tf.logical_and((anchors[:, 2] <= max_height), (anchors[:, 3] <= max_width)),
+            tf.logical_and((anchors[:, 2] <= max_height - 1), (anchors[:, 3] <= max_width - 1)),
         )
     )[:, 0]
     return index_inside

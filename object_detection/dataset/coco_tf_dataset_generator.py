@@ -148,7 +148,7 @@ def get_dataset(root_dir='D:\\data\\COCO2017',
 
     tf_dataset = tf.data.Dataset.from_tensor_slices(coco_dataset.img_ids).map(
         lambda img_id: tuple([*tf.py_func(_parse_coco_data_py, [img_id],
-                                          [tf.string, tf.float32, tf.int32, tf.int32, tf.int64, tf.string])])
+                                          [tf.string, tf.float32, tf.int64, tf.int64, tf.int64, tf.string])])
     )
     tf_dataset = tf_dataset.map(
         lambda file_path, gt_bboxes, image_height, image_width, gt_labels, gt_labels_text: tuple([

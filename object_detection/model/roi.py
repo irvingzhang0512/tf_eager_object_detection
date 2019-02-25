@@ -9,7 +9,7 @@ VGG_16_WEIGHTS_PATH = ('https://github.com/fchollet/deep-learning-models/'
                        'releases/download/v0.1/'
                        'vgg16_weights_tf_dim_ordering_tf_kernels.h5')
 
-__all__ = ['RoiHead', 'RoiPooling', 'RoiTrainingProposal', 'roi_align']
+__all__ = ['RoiHead', 'RoiPooling', 'ProposalTarget', 'roi_align']
 
 
 def crop_and_resize(image, boxes, box_ind, crop_size, pad_border=True):
@@ -87,7 +87,7 @@ class RoiPooling(tf.keras.Model):
 
     def call(self, inputs, training=None, mask=None):
         """
-        输入 backbone 的结果和 rpn proposals 的结果(即 RPNProposal 的输出)
+        输入 backbone 的结果和 rpn proposals 的结果(即 RegionProosal 的输出)
         输出 roi pooloing 的结果，即在特征图上，对每个rpn proposal获取一个固定尺寸的特征图
         :param inputs:
         :param training:
@@ -208,7 +208,7 @@ class RoiHead(tf.keras.Model):
         return score, bboxes
 
 
-class RoiTrainingProposal(tf.keras.Model):
+class ProposalTarget(tf.keras.Model):
     def __init__(self,
                  pos_iou_threshold=0.5,
                  neg_iou_threshold=0.5,
@@ -259,7 +259,7 @@ class RoiTrainingProposal(tf.keras.Model):
         max_ious = tf.reduce_max(iou, axis=1)
         gt_bbox_idx = tf.argmax(iou, axis=1)
         labels = tf.where(max_ious >= self._pos_iou_threshold, tf.ones_like(labels), labels)
-        labels = tf.where(tf.logical_and(max_ious > self._neg_iou_threshold,
+        labels = tf.where(tf.logical_and(max_ious >= self._neg_iou_threshold,
                                          max_ious < self._pos_iou_threshold), tf.zeros_like(labels), labels)
 
         # 筛选正例和反例

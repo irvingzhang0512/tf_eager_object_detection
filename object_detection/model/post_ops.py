@@ -29,7 +29,6 @@ def predict_after_roi(roi_scores_softmax, roi_txtytwth, rois, image_shape,
     :return:
     """
 
-
     # Class IDs per ROI
     class_ids = tf.argmax(roi_scores_softmax, axis=1, output_type=tf.int32)
 

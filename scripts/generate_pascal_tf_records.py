@@ -22,10 +22,10 @@ def _get_tf_example(xml_dict, label_map_dict, image_root):
     classes_text = []
     if 'object' in xml_dict:
         for obj in xml_dict['object']:
-            xmin.append(float(obj['bndbox']['xmin']) / width)
-            ymin.append(float(obj['bndbox']['ymin']) / height)
-            xmax.append(float(obj['bndbox']['xmax']) / width)
-            ymax.append(float(obj['bndbox']['ymax']) / height)
+            xmin.append(float((obj['bndbox']['xmin']) - 1) / (width - 1))
+            ymin.append(float((obj['bndbox']['ymin']) - 1) / (height - 1))
+            xmax.append(float((obj['bndbox']['xmax']) - 1) / (width - 1))
+            ymax.append(float((obj['bndbox']['ymax']) - 1) / (height - 1))
             classes_text.append(obj['name'].encode('utf8'))
             classes.append(label_map_dict[obj['name']])
 

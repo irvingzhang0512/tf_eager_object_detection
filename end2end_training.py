@@ -78,10 +78,14 @@ cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-new'
 
 
 def apply_gradients(model, optimizer, gradients):
-    # for grad, var in zip(gradients, model.variables):
-    #     if grad is not None:
-    #         tf_logging.info(var.name, var.trainable, tf.reduce_min(grad).numpy(), tf.reduce_max(grad).numpy())
-
+    if CONFIG['learning_rate_bias_double']:
+        final_grads = []
+        for grad, var in zip(gradients, model.variables):
+            scale = 1
+            if 'biases' in grad.name:
+                scale = 2
+            final_grads.append(grad * scale)
+        gradients = final_grads
     optimizer.apply_gradients(zip(gradients, model.variables),
                               global_step=tf.train.get_or_create_global_step())
 

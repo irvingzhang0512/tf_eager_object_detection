@@ -1,6 +1,6 @@
 import tensorflow as tf
-from object_detection.model.rpn import RPNHead, RPNTrainingProposal, RPNProposal
-from object_detection.model.roi import RoiTrainingProposal, RoiHead, RoiPooling
+from object_detection.model.rpn import RPNHead, AnchorTarget, RegionProosal
+from object_detection.model.roi import ProposalTarget, RoiHead, RoiPooling
 from object_detection.utils.anchors import generate_anchor_base, generate_by_anchor_base_np
 from object_detection.model.losses import get_rpn_loss, get_roi_loss
 from tensorflow.python.platform import tf_logging
@@ -44,7 +44,7 @@ class BaseRpnModel(tf.keras.Model):
 
         self._num_classes = num_classes
 
-        self._rpn_proposal = RPNProposal(
+        self._rpn_proposal = RegionProosal(
             num_pre_nms_train=rpn_proposal_num_pre_nms_train,
             num_post_nms_train=rpn_proposal_num_post_nms_train,
             num_pre_nms_test=rpn_proposal_num_pre_nms_test,
@@ -71,7 +71,8 @@ class BaseRpnModel(tf.keras.Model):
         # plan B，相对 plan A 性能明显提升
         # TODO 是否能通过 tf 操作构建 anchors
         anchors = generate_by_anchor_base_np(self._anchor_base, self._extractor_stride,
-                                             shared_feature_shape[0], shared_feature_shape[1])
+                                             shared_feature_shape[0]*self._extractor_stride,
+                                             shared_feature_shape[1]*self._extractor_stride)
 
         # 4）获取 RPN Proposal 结果；
         rpn_proposals_bboxes = self._rpn_proposal((rpn_bboxes_txtytwth,
@@ -143,7 +144,7 @@ class BaseFasterRcnnModel(tf.keras.Model):
 
         self._num_classes = num_classes
 
-        self._rpn_proposal = RPNProposal(
+        self._rpn_proposal = RegionProosal(
             num_pre_nms_train=rpn_proposal_num_pre_nms_train,
             num_post_nms_train=rpn_proposal_num_post_nms_train,
             num_pre_nms_test=rpn_proposal_num_pre_nms_test,
@@ -219,7 +220,7 @@ class RpnTrainingModel(tf.keras.Model):
 
         self._sigma = sigma
         self._rpn_training_total_num_samples = rpn_training_total_num_samples
-        self._rpn_training_proposal = RPNTrainingProposal(
+        self._rpn_training_proposal = AnchorTarget(
             pos_iou_threshold=rpn_training_pos_iou_threshold,
             neg_iou_threshold=rpn_training_neg_iou_threshold,
             total_num_samples=rpn_training_total_num_samples,
@@ -263,7 +264,7 @@ class RoiTrainingModel(tf.keras.Model):
         self._num_classes = num_classes
         self._roi_training_total_num_samples = roi_training_total_num_samples
 
-        self._roi_training_proposal = RoiTrainingProposal(
+        self._roi_training_proposal = ProposalTarget(
             pos_iou_threshold=roi_training_pos_iou_threshold,
             neg_iou_threshold=roi_training_neg_iou_threshold,
             total_num_samples=roi_training_total_num_samples,
