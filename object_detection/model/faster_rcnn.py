@@ -1,5 +1,5 @@
 import tensorflow as tf
-from object_detection.model.rpn import RPNHead, AnchorTarget, RegionProosal
+from object_detection.model.rpn import RPNHead, AnchorTarget, RegionProposal
 from object_detection.model.roi import ProposalTarget, RoiHead, RoiPooling
 from object_detection.utils.anchors import generate_anchor_base, generate_by_anchor_base_np
 from object_detection.model.losses import get_rpn_loss, get_roi_loss
@@ -44,7 +44,7 @@ class BaseRpnModel(tf.keras.Model):
 
         self._num_classes = num_classes
 
-        self._rpn_proposal = RegionProosal(
+        self._rpn_proposal = RegionProposal(
             num_pre_nms_train=rpn_proposal_num_pre_nms_train,
             num_post_nms_train=rpn_proposal_num_post_nms_train,
             num_pre_nms_test=rpn_proposal_num_pre_nms_test,
@@ -144,7 +144,7 @@ class BaseFasterRcnnModel(tf.keras.Model):
 
         self._num_classes = num_classes
 
-        self._rpn_proposal = RegionProosal(
+        self._rpn_proposal = RegionProposal(
             num_pre_nms_train=rpn_proposal_num_pre_nms_train,
             num_post_nms_train=rpn_proposal_num_post_nms_train,
             num_pre_nms_test=rpn_proposal_num_pre_nms_test,

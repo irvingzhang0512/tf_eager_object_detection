@@ -67,27 +67,24 @@ def bboxes_clip_filter(rpn_proposals, min_value, max_height, max_width, min_edge
     :param min_edge:
     :return:
     """
-    rpn_proposals = tf.where(rpn_proposals < min_value, tf.ones_like(rpn_proposals) * min_value, rpn_proposals)
-
     channels = tf.split(rpn_proposals, 4, axis=1)
     channels[0] = tf.maximum(tf.minimum(channels[0], max_height - 1), min_value)
     channels[1] = tf.maximum(tf.minimum(channels[1], max_width - 1), min_value)
     channels[2] = tf.maximum(tf.minimum(channels[2], max_height - 1), min_value)
     channels[3] = tf.maximum(tf.minimum(channels[3], max_width - 1), min_value)
-    # channels[0] = tf.where(channels[0] > max_height, tf.ones_like(channels[0]) * max_height, channels[0])
-    # channels[1] = tf.where(channels[1] > max_width, tf.ones_like(channels[1]) * max_width, channels[1])
-    # channels[2] = tf.where(channels[2] > max_height, tf.ones_like(channels[2]) * max_height, channels[2])
-    # channels[3] = tf.where(channels[3] > max_width, tf.ones_like(channels[3]) * max_width, channels[3])
+    # channels[0] = tf.maximum(tf.minimum(channels[0], max_width - 1), min_value)
+    # channels[1] = tf.maximum(tf.minimum(channels[1], max_height - 1), min_value)
+    # channels[2] = tf.maximum(tf.minimum(channels[2], max_width - 1), min_value)
+    # channels[3] = tf.maximum(tf.minimum(channels[3], max_height - 1), min_value)
+    rpn_proposals = tf.concat(channels, axis=1)
 
     if min_edge is None:
-        rpn_proposals = tf.concat(channels, axis=1)
         return rpn_proposals, tf.range(rpn_proposals.shape[0])
 
     min_edge = tf.to_float(min_edge)
     y_len = tf.to_float(channels[2] - channels[0] + 1.0)
     x_len = tf.to_float(channels[3] - channels[1] + 1.0)
-    rpn_proposals_idx = tf.where(tf.logical_and(x_len >= min_edge, y_len >= min_edge))
-    rpn_proposals_idx = rpn_proposals_idx[:, 0]
+    rpn_proposals_idx = tf.where(tf.logical_and(x_len >= min_edge, y_len >= min_edge))[:, 0]
     return tf.gather(rpn_proposals, rpn_proposals_idx), rpn_proposals_idx
 
 
@@ -105,4 +102,10 @@ def bboxes_range_filter(anchors, max_height, max_width):
             tf.logical_and((anchors[:, 2] <= max_height - 1), (anchors[:, 3] <= max_width - 1)),
         )
     )[:, 0]
+    # index_inside = tf.where(
+    #     tf.logical_and(
+    #         tf.logical_and((anchors[:, 0] >= 0), (anchors[:, 1] >= 0)),
+    #         tf.logical_and((anchors[:, 2] <= max_width - 1), (anchors[:, 3] <= max_height - 1)),
+    #     )
+    # )[:, 0]
     return index_inside

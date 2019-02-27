@@ -5,7 +5,7 @@ from tensorflow.python.platform import tf_logging
 
 layers = tf.keras.layers
 
-__all__ = ['RPNHead', 'AnchorTarget', 'RegionProosal']
+__all__ = ['RPNHead', 'AnchorTarget', 'RegionProposal']
 
 
 class RPNHead(tf.keras.Model):
@@ -14,6 +14,7 @@ class RPNHead(tf.keras.Model):
         :param num_anchors:
         """
         super().__init__()
+        self._num_anchors = num_anchors
         self._rpn_conv = layers.Conv2D(512, [3, 3],
                                        padding='same', name='rpn_first_conv', activation='relu',
                                        kernel_initializer=tf.random_normal_initializer(0, 0.01),
@@ -42,7 +43,7 @@ class RPNHead(tf.keras.Model):
         x = self._rpn_conv(inputs)
 
         rpn_score = self._rpn_score_conv(x)
-        rpn_score_reshape = tf.reshape(rpn_score, [-1, 2])
+        rpn_score_reshape = tf.reshape(rpn_score, [-1, self._num_anchors*2])
 
         rpn_bbox = self._rpn_bbox_conv(x)
         rpn_bbox_reshape = tf.reshape(rpn_bbox, [-1, 4])
@@ -147,8 +148,9 @@ class AnchorTarget(tf.keras.Model):
                tf.stop_gradient(rpn_gt_txtytwth), tf.stop_gradient(cur_pos_num)
 
 
-class RegionProosal(tf.keras.Model):
+class RegionProposal(tf.keras.Model):
     def __init__(self,
+                 num_anchors=9,
                  num_pre_nms_train=12000,
                  num_post_nms_train=2000,
                  num_pre_nms_test=6000,
@@ -158,6 +160,7 @@ class RegionProosal(tf.keras.Model):
                  target_stds=None):
         super().__init__()
 
+        self._num_anchors = num_anchors
         self._num_pre_nms_train = num_pre_nms_train
         self._num_post_nms_train = num_post_nms_train
         self._num_pre_nms_test = num_pre_nms_test
@@ -201,10 +204,14 @@ class RegionProosal(tf.keras.Model):
                                                        self._target_means, self._target_stds)
 
         # 2. 对选中修正后的anchors进行处理
-        decoded_bboxes, selected_idx = bboxes_clip_filter(decoded_bboxes,
-                                                          0, image_shape[0], image_shape[1], extractor_stride)
-        scores = tf.gather(scores, selected_idx)
-        tf_logging.debug('rpn after filter has %d proposals' % tf.size(selected_idx))
+        decoded_bboxes, _ = bboxes_clip_filter(decoded_bboxes, 0, image_shape[0], image_shape[1])
+
+        # scores = tf.reshape(tf.transpose(tf.reshape(scores, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
+        # scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
+        # scores = tf.reshape(scores, [-1, 2*self._num_anchors])
+        # scores = tf.reshape(scores[..., self._num_anchors:], [-1])
+
+        scores = tf.nn.softmax(tf.reshape(scores, [-1, 2]))[:, 1]
 
         # 3. 根据rpn_score获取num_pre_nms个anchors。
         num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
@@ -216,8 +223,8 @@ class RegionProosal(tf.keras.Model):
         # 4. 进行nms。
         # 5. 根据rpn_score排序，获取num_post_nms个anchors作为proposal结果。
         num_post_nms = self._num_post_nms_train if training else self._num_post_nms_test
-        cur_top_k = tf.minimum(num_post_nms, tf.size(scores))
-        selected_idx = tf.image.non_max_suppression(tf.to_float(decoded_bboxes), scores, cur_top_k,
+        selected_idx = tf.image.non_max_suppression(tf.to_float(decoded_bboxes), scores,
+                                                    max_output_size=num_post_nms,
                                                     iou_threshold=self._nms_iou_threshold)
 
         tf_logging.debug('rpn proposal net generate %d proposals' % tf.size(selected_idx))

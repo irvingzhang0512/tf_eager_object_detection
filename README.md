@@ -54,6 +54,7 @@
 + [x] set bboxes range in `[0, height - 1]` & `[0, width - 1]`.
 + [ ] add model load/save functions.
 + [ ] predict and visual scripts.
++ [ ] add prediction_score_threshold for image summary.
 
 
 

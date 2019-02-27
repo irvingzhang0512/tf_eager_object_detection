@@ -27,7 +27,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                activation='relu',
                                padding='same',
                                name='block1_conv2', trainable=False))
-        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool', padding='same'))
 
         # Block 2
         self.add(layers.Conv2D(128, (3, 3),
@@ -38,7 +38,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                activation='relu',
                                padding='same',
                                name='block2_conv2', trainable=False))
-        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool', padding='same'))
 
         # Block 3
         self.add(layers.Conv2D(256, (3, 3),
@@ -53,7 +53,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                activation='relu',
                                padding='same',
                                name='block3_conv3'))
-        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool', padding='same'))
 
         # Block 4
         self.add(layers.Conv2D(512, (3, 3),
@@ -68,7 +68,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                activation='relu',
                                padding='same',
                                name='block4_conv3'))
-        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool', padding='same'))
 
         # Block 5
         self.add(layers.Conv2D(512, (3, 3),
@@ -84,7 +84,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                padding='same',
                                name='block5_conv3'))
         if ckpt_file_path:
-            self._load_slim_weights(ckpt_file_path)
+            self.load_slim_weights(ckpt_file_path)
         else:
             self._load_keras_weights()
 
@@ -95,8 +95,9 @@ class Vgg16Extractor(tf.keras.Sequential):
             cache_subdir='models',
             file_hash='64373286793e3c8b2b4e3219cbf3544b')
         self.load_weights(weights_path, by_name=True)
+        tf.logging.info('successfully loaded keras vgg weights.')
 
-    def _load_slim_weights(self, ckpt_file_path):
+    def load_slim_weights(self, ckpt_file_path):
         reader = tf.train.NewCheckpointReader(ckpt_file_path)
         slim_to_keras = {
             "vgg_16/conv1/conv1_1/": "block1_conv1",
@@ -107,6 +108,7 @@ class Vgg16Extractor(tf.keras.Sequential):
 
             "vgg_16/conv3/conv3_1/": "block3_conv1",
             "vgg_16/conv3/conv3_2/": "block3_conv2",
+            "vgg_16/conv3/conv3_3/": "block3_conv3",
 
             "vgg_16/conv4/conv4_1/": "block4_conv1",
             "vgg_16/conv4/conv4_2/": "block4_conv2",
@@ -121,6 +123,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                 reader.get_tensor(slim_tensor_name_pre+'weights'),
                 reader.get_tensor(slim_tensor_name_pre+'biases'),
             ])
+        tf.logging.info('successfully loaded slim vgg weights.')
 
 
 def identity_block(input_tensor, kernel_size, filters, stage, block):

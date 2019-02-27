@@ -56,6 +56,7 @@ def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', fig
     bboxes = np.array(bboxes) + 1
     if preprocess_type == 'caffe':
         cur_means = [103.939, 116.779, 123.68]
+        # cur_means = [102.9801, 115.9465, 122.7717]
         image[..., 0] += cur_means[0]
         image[..., 1] += cur_means[1]
         image[..., 2] += cur_means[2]

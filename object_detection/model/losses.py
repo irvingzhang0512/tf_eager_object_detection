@@ -1,6 +1,5 @@
 import tensorflow as tf
 
-
 __all__ = ['get_rpn_loss', 'get_roi_loss']
 
 
@@ -54,8 +53,11 @@ def get_rpn_loss(rpn_raw_score, rpn_raw_pred_txtytwth, rpn_gt_labels, rpn_gt_txt
     :return:
     """
     rpn_cls_loss = cls_loss(tf.gather(rpn_raw_score, rpn_training_idx), rpn_gt_labels)
-    rpn_reg_loss = smooth_l1_loss(tf.gather(rpn_raw_pred_txtytwth, rpn_training_idx[:rpn_pos_num]),
-                                  rpn_gt_txtytwth, sigma=sigma) / tf.to_float(tf.size(rpn_training_idx))
+    if rpn_pos_num.numpy() == 0:
+        rpn_reg_loss = tf.to_float(0)
+    else:
+        rpn_reg_loss = smooth_l1_loss(tf.gather(rpn_raw_pred_txtytwth, rpn_training_idx[:rpn_pos_num]),
+                                      rpn_gt_txtytwth, sigma=sigma) / tf.to_float(tf.size(rpn_training_idx))
     return rpn_cls_loss, rpn_reg_loss
 
 
@@ -78,7 +80,11 @@ def get_roi_loss(roi_raw_score, roi_raw_pred_txtytwth, roi_gt_labels, roi_gt_txt
 
     pred_txtytwth = tf.gather_nd(roi_raw_pred_txtytwth,
                                  tf.stack([roi_training_idx[:roi_pos_num], roi_gt_labels[:roi_pos_num]], axis=1))
-    rpn_reg_loss = smooth_l1_loss(pred_txtytwth,
-                                  roi_gt_txtytwth,
-                                  sigma=sigma) / tf.to_float(tf.size(roi_training_idx))
+
+    if roi_pos_num.numpy() == 0:
+        rpn_reg_loss = tf.to_float(0)
+    else:
+        rpn_reg_loss = smooth_l1_loss(pred_txtytwth,
+                                      roi_gt_txtytwth,
+                                      sigma=sigma) / tf.to_float(tf.size(roi_training_idx))
     return rpn_cls_loss, rpn_reg_loss

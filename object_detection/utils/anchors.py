@@ -45,25 +45,43 @@ def generate_by_anchor_base_np(anchor_base, feat_stride, height, width):
 
 
 def generate_by_anchor_base_tf(anchor_base, feat_stride, height, width):
-    # Enumerate all shifted anchors:
-    #
-    # add A anchors (1, A, 4) to
-    # cell K shifts (K, 1, 4) to get
-    # shift anchors (K, A, 4)
-    # reshape to (K*A, 4) shifted anchors
-    # return (K*A, 4)
-
-    shift_y = tf.range(0, height, feat_stride, dtype=tf.float32)
-    shift_x = tf.range(0, width, feat_stride, dtype=tf.float32)
+    shift_x = tf.range(width) * feat_stride  # width
+    shift_y = tf.range(height) * feat_stride  # height
     shift_x, shift_y = tf.meshgrid(shift_x, shift_y)
-    shift = tf.stack([tf.reshape(shift_y, [-1]), tf.reshape(shift_x, [-1]),
-                      tf.reshape(shift_y, [-1]), tf.reshape(shift_x, [-1])], axis=1)
+    sx = tf.reshape(shift_x, shape=(-1,))
+    sy = tf.reshape(shift_y, shape=(-1,))
+    # shifts = tf.transpose(tf.stack([sx, sy, sx, sy]))
+    shifts = tf.transpose(tf.stack([sy, sx, sy, sx]))
 
+    K = tf.multiply(width, height)
     A = anchor_base.shape[0]
-    K = shift.shape[0]
-    anchor = tf.to_float(tf.reshape(anchor_base, [1, A, 4])) + tf.transpose(tf.reshape(shift, [1, K, 4]), [1, 0, 2])
-    anchor = tf.to_float(tf.reshape(anchor, [K * A, 4]))
-    return anchor
+    shifts = tf.transpose(tf.reshape(shifts, shape=[1, K, 4]), perm=(1, 0, 2))
+    anchor_constant = tf.to_float(tf.reshape(anchor_base, (1, A, 4)))
+    anchors_tf = tf.reshape(tf.add(anchor_constant, tf.to_float(shifts)), shape=(-1, 4))
+
+    return tf.cast(anchors_tf, dtype=tf.float32)
+
+
+# def generate_by_anchor_base_tf(anchor_base, feat_stride, height, width):
+#     # Enumerate all shifted anchors:
+#     #
+#     # add A anchors (1, A, 4) to
+#     # cell K shifts (K, 1, 4) to get
+#     # shift anchors (K, A, 4)
+#     # reshape to (K*A, 4) shifted anchors
+#     # return (K*A, 4)
+#
+#     shift_y = tf.range(0, height, feat_stride, dtype=tf.float32)
+#     shift_x = tf.range(0, width, feat_stride, dtype=tf.float32)
+#     shift_x, shift_y = tf.meshgrid(shift_x, shift_y)
+#     shift = tf.stack([tf.reshape(shift_y, [-1]), tf.reshape(shift_x, [-1]),
+#                       tf.reshape(shift_y, [-1]), tf.reshape(shift_x, [-1])], axis=1)
+#
+#     A = anchor_base.shape[0]
+#     K = shift.shape[0]
+#     anchor = tf.to_float(tf.reshape(anchor_base, [1, A, 4])) + tf.transpose(tf.reshape(shift, [1, K, 4]), [1, 0, 2])
+#     anchor = tf.to_float(tf.reshape(anchor, [K * A, 4]))
+#     return anchor
 
 
 def generate_anchor_base(base_size=16, ratios=[0.5, 1, 2],

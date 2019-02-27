@@ -1,7 +1,6 @@
 import tensorflow as tf
 
 from object_detection.utils.bbox_transform import decode_bbox_with_mean_and_std
-from object_detection.utils.bbox_np import bboxes_clip_filter as bboxes_clip_filter_np
 from object_detection.utils.bbox_tf import bboxes_clip_filter as bboxes_clip_filter_tf
 
 
@@ -98,53 +97,53 @@ def predict_after_roi(roi_scores_softmax, roi_txtytwth, rois, image_shape,
     return tf.gather(refined_rois, keep), tf.gather(class_ids, keep), tf.gather(class_scores, keep)
 
 
-def post_ops_prediction(inputs,
-                        num_classes=21,
-                        max_num_per_class=5,
-                        max_num_per_image=5,
+def post_ops_prediction(roi_scores_softmax, roi_txtytwth, rois, image_shape,
+                        target_means, target_stds,
+                        max_num_per_class=15,
+                        max_num_per_image=150,
                         nms_iou_threshold=0.3,
-                        score_threshold=0.3,
+                        score_threshold=0.05,
                         extractor_stride=16,
-                        target_means=None,
-                        target_stds=None
+                        num_classes=21,
                         ):
     """
-    有问题，需要详细看下
-    :param inputs:
-    :param num_classes:
+
+    :param roi_scores_softmax:      [num_rois, num_classes]
+    :param roi_txtytwth:            [num_rois, num_classes, 4]
+    :param rois:                    [num_rois, 4]
+    :param image_shape:             [2,]
+    :param target_means:            [4,]
+    :param target_stds:             [4,]
     :param max_num_per_class:
     :param max_num_per_image:
     :param nms_iou_threshold:
     :param score_threshold:
     :param extractor_stride:
-    :param target_means:
-    :param target_stds:
+    :param num_classes:
     :return:
     """
     if target_stds is None:
         target_stds = [1, 1, 1, 1]
     if target_means is None:
         target_means = [0, 0, 0, 0]
-    rpn_proposals_bboxes, roi_score, roi_bboxes_txtytwth, image_shape = inputs
-    roi_score = tf.nn.softmax(roi_score)
-
     res_scores = []
     res_bboxes = []
     res_cls = []
     for i in range(1, num_classes):
-        cur_cls_score = roi_score[:, i]
-        final_bboxes = decode_bbox_with_mean_and_std(rpn_proposals_bboxes, roi_bboxes_txtytwth[:, i, :],
+        inds = tf.where(roi_scores_softmax[:, i] > score_threshold)[:, 0]
+        cls_score = tf.gather(roi_scores_softmax[:, i], inds)
+        # cls_score = roi_scores_softmax[inds, i]
+        final_bboxes = decode_bbox_with_mean_and_std(rois, roi_txtytwth[:, i, :],
                                                      target_means, target_stds)
-        final_bboxes, final_bboxes_idx = bboxes_clip_filter_np(final_bboxes, 0, image_shape[0], image_shape[1],
-                                                               extractor_stride)
-        cur_cls_score = tf.gather(cur_cls_score, final_bboxes_idx)
-        cur_idx = tf.image.non_max_suppression(final_bboxes, cur_cls_score,
-                                               max_num_per_class, nms_iou_threshold, score_threshold)
-        if tf.size(cur_idx).numpy() == 0:
+        final_bboxes, _ = bboxes_clip_filter_tf(final_bboxes, 0, image_shape[0], image_shape[1])
+        final_bboxes = tf.gather(final_bboxes, inds)
+
+        keep = tf.image.non_max_suppression(final_bboxes, cls_score, max_num_per_class, iou_threshold=nms_iou_threshold)
+        if tf.size(keep).numpy() == 0:
             continue
-        res_scores.append(tf.gather(cur_cls_score, cur_idx))
-        res_bboxes.append(tf.gather(final_bboxes, cur_idx))
-        res_cls.append(tf.ones_like(cur_idx, dtype=tf.int32) * i)
+        res_scores.append(tf.gather(cls_score, keep))
+        res_bboxes.append(tf.gather(final_bboxes, keep))
+        res_cls.append(tf.ones_like(keep, dtype=tf.int32) * i)
 
     if len(res_scores) == 0:
         return None, None, None

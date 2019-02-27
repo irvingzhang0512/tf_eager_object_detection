@@ -2,6 +2,7 @@ import tensorflow as tf
 import os
 import time
 import matplotlib
+
 matplotlib.use('agg')
 
 from object_detection.model.vgg16_faster_rcnn import Vgg16FasterRcnn
@@ -28,7 +29,6 @@ elif DATASET_TYPE == 'coco':
 else:
     raise ValueError('Unknown Dataset Type')
 
-
 # train_records_list = [
 #     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
 #     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
@@ -47,6 +47,7 @@ else:
 # cur_val_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs-new/val'
 # cur_ckpt_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs-new'
 # coco_root_path = "/home/tensorflow05/data/COCO2017"
+# tf_faster_rcnn_ckpt_file_path = '/home/tensorflow05/data/voc_2007_trainval/vgg16_faster_rcnn_iter_70000.ckpt'
 
 
 train_records_list = [
@@ -63,10 +64,11 @@ eval_records_list = [
     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
 ]
-cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-coco'
-cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-coco/val'
-cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-coco'
+cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1'
+cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1/val'
+cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1'
 coco_root_path = "/ssd/zhangyiyang/COCO2017"
+tf_faster_rcnn_ckpt_file_path = '/ssd/zhangyiyang/voc_2007_trainval/vgg16_faster_rcnn_iter_70000.ckpt'
 
 
 # train_records_list = [
@@ -93,6 +95,8 @@ def apply_gradients(model, optimizer, gradients):
     if CONFIG['learning_rate_bias_double']:
         all_grads = []
         for grad, var in zip(gradients, model.variables):
+            if grad is None:
+                continue
             scale = 1.0
             if 'biases' in var.name:
                 scale = 2.0

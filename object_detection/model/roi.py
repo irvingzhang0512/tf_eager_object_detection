@@ -83,7 +83,7 @@ class RoiPooling(tf.keras.Model):
         self._pool_size = pool_size
         self._concat_layer = layers.Concatenate(axis=0)
         self._flatten_layer = layers.Flatten()
-        self._max_pool = layers.MaxPooling2D()
+        self._max_pool = layers.MaxPooling2D(padding='same')
 
     def call(self, inputs, training=None, mask=None):
         """
@@ -141,6 +141,12 @@ class RoiPooling(tf.keras.Model):
         batch_ids = tf.zeros([tf.shape(rois)[0]], dtype=tf.int32)
         h, w = shared_layers.get_shape().as_list()[1:3]
         roi_channels = tf.split(rois, 4, axis=1)
+        # bboxes = tf.concat([
+        #     roi_channels[1] / tf.to_float(h - 1),
+        #     roi_channels[0] / tf.to_float(w - 1),
+        #     roi_channels[3] / tf.to_float(h - 1),
+        #     roi_channels[2] / tf.to_float(w - 1),
+        # ], axis=1)
         bboxes = tf.concat([
             roi_channels[0] / tf.to_float(h),
             roi_channels[1] / tf.to_float(w),

@@ -64,8 +64,9 @@ def _caffe_preprocessing(image):
     # return tf.keras.applications.vgg16.preprocess_input(image)
 
     image = tf.to_float(image)
-    image = image[..., ::-1]
+    image = tf.reverse(image, axis=[-1])
     means = [103.939, 116.779, 123.68]
+    # means = [102.9801, 115.9465, 122.7717]
     channels = tf.split(axis=-1, num_or_size_splits=3, value=image)
     for i in range(3):
         channels[i] -= means[i]
@@ -99,13 +100,23 @@ def preprocessing_func(image, bboxes, height, width, labels, labels_text,
     :param labels_text:
     :return:
     """
+
+    if preprocessing_type == 'caffe':
+        preprocessing_fn = _caffe_preprocessing
+    elif preprocessing_type == 'tf':
+        preprocessing_fn = _tf_preprocessing
+    else:
+        raise ValueError('unknown preprocessing type {}'.format(preprocessing_type))
+    image = preprocessing_fn(image)
+
     height = tf.to_float(height[0])
     width = tf.to_float(width[0])
     scale1 = min_size / tf.minimum(height, width)
-    scale2 = max_size / tf.minimum(height, width)
+    scale2 = max_size / tf.maximum(height, width)
     scale = tf.minimum(scale1, scale2)
     n_height = tf.to_int32(scale * height)
     n_width = tf.to_int32(scale * width)
+    image = tf.image.resize_bilinear(image, (n_height, n_width))
 
     channels = tf.split(axis=-1, num_or_size_splits=4, value=bboxes)
     channels[0] = channels[0] * tf.to_float(n_height - 1)
@@ -114,13 +125,4 @@ def preprocessing_func(image, bboxes, height, width, labels, labels_text,
     channels[3] = channels[3] * tf.to_float(n_width - 1)
     bboxes = tf.concat(channels, axis=-1)
 
-    image = tf.image.resize_bilinear(image, (n_height, n_width))
-
-    if preprocessing_type == 'caffe':
-        preprocessing_fn = _caffe_preprocessing
-    elif preprocessing_type == 'tf':
-        preprocessing_fn = _tf_preprocessing
-    else:
-        raise ValueError('unknown preprocessing type {}'.format(preprocessing_type))
-
-    return preprocessing_fn(image), bboxes, labels, labels_text
+    return image, bboxes, labels, labels_text
