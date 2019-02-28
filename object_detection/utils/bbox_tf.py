@@ -68,14 +68,10 @@ def bboxes_clip_filter(rpn_proposals, min_value, max_height, max_width, min_edge
     :return:
     """
     channels = tf.split(rpn_proposals, 4, axis=1)
-    channels[0] = tf.maximum(tf.minimum(channels[0], max_height - 1), min_value)
-    channels[1] = tf.maximum(tf.minimum(channels[1], max_width - 1), min_value)
-    channels[2] = tf.maximum(tf.minimum(channels[2], max_height - 1), min_value)
-    channels[3] = tf.maximum(tf.minimum(channels[3], max_width - 1), min_value)
-    # channels[0] = tf.maximum(tf.minimum(channels[0], max_width - 1), min_value)
-    # channels[1] = tf.maximum(tf.minimum(channels[1], max_height - 1), min_value)
-    # channels[2] = tf.maximum(tf.minimum(channels[2], max_width - 1), min_value)
-    # channels[3] = tf.maximum(tf.minimum(channels[3], max_height - 1), min_value)
+    channels[0] = tf.maximum(tf.minimum(channels[0], max_width - 1), min_value)
+    channels[1] = tf.maximum(tf.minimum(channels[1], max_height - 1), min_value)
+    channels[2] = tf.maximum(tf.minimum(channels[2], max_width - 1), min_value)
+    channels[3] = tf.maximum(tf.minimum(channels[3], max_height - 1), min_value)
     rpn_proposals = tf.concat(channels, axis=1)
 
     if min_edge is None:
@@ -99,13 +95,7 @@ def bboxes_range_filter(anchors, max_height, max_width):
     index_inside = tf.where(
         tf.logical_and(
             tf.logical_and((anchors[:, 0] >= 0), (anchors[:, 1] >= 0)),
-            tf.logical_and((anchors[:, 2] <= max_height - 1), (anchors[:, 3] <= max_width - 1)),
+            tf.logical_and((anchors[:, 2] <= max_width - 1), (anchors[:, 3] <= max_height - 1)),
         )
     )[:, 0]
-    # index_inside = tf.where(
-    #     tf.logical_and(
-    #         tf.logical_and((anchors[:, 0] >= 0), (anchors[:, 1] >= 0)),
-    #         tf.logical_and((anchors[:, 2] <= max_width - 1), (anchors[:, 3] <= max_height - 1)),
-    #     )
-    # )[:, 0]
     return index_inside

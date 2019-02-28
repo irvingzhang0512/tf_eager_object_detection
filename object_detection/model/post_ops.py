@@ -132,7 +132,6 @@ def post_ops_prediction(roi_scores_softmax, roi_txtytwth, rois, image_shape,
     for i in range(1, num_classes):
         inds = tf.where(roi_scores_softmax[:, i] > score_threshold)[:, 0]
         cls_score = tf.gather(roi_scores_softmax[:, i], inds)
-        # cls_score = roi_scores_softmax[inds, i]
         final_bboxes = decode_bbox_with_mean_and_std(rois, roi_txtytwth[:, i, :],
                                                      target_means, target_stds)
         final_bboxes, _ = bboxes_clip_filter_tf(final_bboxes, 0, image_shape[0], image_shape[1])

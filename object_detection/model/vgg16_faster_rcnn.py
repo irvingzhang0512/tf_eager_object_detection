@@ -3,9 +3,9 @@ import tensorflow as tf
 from object_detection.model.extractor.feature_extractor import Vgg16Extractor
 from object_detection.model.rpn import RegionProposal, AnchorTarget, RPNHead
 from object_detection.model.roi import ProposalTarget, RoiPooling, RoiHead
-from object_detection.model.losses import get_rpn_loss, get_roi_loss
-from object_detection.utils.anchors import generate_by_anchor_base_tf, generate_anchor_base, generate_anchors_tf
-from object_detection.model.post_ops import predict_after_roi, post_ops_prediction
+from object_detection.model.losses import smooth_l1_loss, cls_loss
+from object_detection.utils.anchors import generate_by_anchor_base_tf, generate_anchor_base
+from object_detection.model.post_ops import post_ops_prediction
 
 __all__ = ['Vgg16FasterRcnn']
 
@@ -13,7 +13,7 @@ __all__ = ['Vgg16FasterRcnn']
 class Vgg16FasterRcnn(tf.keras.Model):
     def __init__(self,
                  num_classes=21,
-                 weight_decay=0.0005,
+                 weight_decay=0.0001,
 
                  ratios=[0.5, 1.0, 2.0],
                  scales=[8, 16, 32],
@@ -73,7 +73,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
         self._extractor = Vgg16Extractor()
 
         self._rpn_head = RPNHead(self._num_anchors, weight_decay=weight_decay)
-        self._anchor_generator = generate_anchors_tf
+        self._anchor_generator = generate_by_anchor_base_tf
         self._anchor_base = tf.to_float(generate_anchor_base(extractor_stride, ratios, scales))
         self._rpn_proposal = RegionProposal(
             num_anchors=self._num_anchors,
@@ -119,48 +119,52 @@ class Vgg16FasterRcnn(tf.keras.Model):
         shared_features_shape = shared_features.get_shape().as_list()[1:3]
         tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
 
-        # anchors = self._anchor_generator(shape=shared_features_shape,
-        #                                  ratios=self._ratios, scales=self._scales) * self._extractor_stride
-        anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
-                                             tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                             tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
-                                             )
+        anchors = self._anchor_generator(self._anchor_base, self._extractor_stride,
+                                         tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
+                                         tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
+                                         )
 
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
 
         rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=training)
         rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
                                   training=training)
-        roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),
-                                         training=training)
-        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=training)
 
         if training:
-            rpn_training_idx, rpn_gt_labels, rpn_gt_txtytwth, rpn_pos_num = self._anchor_target((anchors,
-                                                                                                 gt_bboxes,
-                                                                                                 image_shape),
-                                                                                                False)
-            # [num_anchors, 2 * num_anchors]
-            # rpn_score = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self._num_anchors]), (0, 2, 1)), [-1, 2])
-            rpn_score = tf.reshape(rpn_score, [-1, 2])
-            rpn_cls_loss, rpn_reg_loss = get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
-                                                      rpn_gt_labels, rpn_gt_txtytwth,
-                                                      rpn_training_idx, rpn_pos_num,
-                                                      sigma=self._rpn_sigma)
+            # rpn loss
+            rpn_labels, rpn_bbox_targets, rpn_in_weights, rpn_out_weights = self._anchor_target((gt_bboxes,
+                                                                                                 image_shape,
+                                                                                                 anchors,
+                                                                                                 self._num_anchors),
+                                                                                                True)
+            rpn_cls_loss, rpn_reg_loss = self._get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
+                                                            rpn_labels, rpn_bbox_targets,
+                                                            rpn_in_weights, rpn_out_weights)
 
-            roi_training_idx, roi_gt_labels, roi_gt_txtytwth, roi_pos_num = self._proposal_target((rois,
-                                                                                                   gt_bboxes,
-                                                                                                   gt_labels,
-                                                                                                   image_shape),
-                                                                                                  False)
-            roi_cls_loss, roi_reg_loss = get_roi_loss(roi_score, roi_bboxes_txtytwth,
-                                                      roi_gt_labels, roi_gt_txtytwth,
-                                                      roi_training_idx, roi_pos_num,
-                                                      sigma=self._roi_sigma)
+            # roi loss
+            final_rois, roi_labels, roi_bbox_target, roi_in_weights, roi_out_weights = self._proposal_target((rois,
+                                                                                                              gt_bboxes,
+                                                                                                              gt_labels,
+                                                                                                              ),
+                                                                                                             True)
+            # 训练时，只计算 proposal target 的 roi_features，一般只有128个
+            roi_features = self._roi_pooling((shared_features, final_rois, self._extractor_stride),
+                                             training=training)
+            roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=training)
+            roi_cls_loss, roi_reg_loss = self._get_roi_loss(roi_score, roi_bboxes_txtytwth,
+                                                            roi_labels, roi_bbox_target,
+                                                            roi_in_weights, roi_out_weights)
+
             return rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss
         else:
+            # 预测时，计算所有 region proposal 生成的 roi 的 roi_features，默认为300个
+            roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),
+                                             training=training)
+            roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=training)
+
             # pred_bboxes, pred_labels, pred_scores
             roi_score_softmax = tf.nn.softmax(roi_score)
+            roi_bboxes_txtytwth = tf.reshape(roi_bboxes_txtytwth, [-1, self._num_classes, 4])
             pred_rois, pred_labels, pred_scores = post_ops_prediction(roi_score_softmax, roi_bboxes_txtytwth,
                                                                       rois, image_shape,
                                                                       self._roi_proposal_means, self._roi_proposal_stds,
@@ -172,6 +176,33 @@ class Vgg16FasterRcnn(tf.keras.Model):
                                                                       )
             return pred_rois, pred_labels, pred_scores
 
+    def _get_rpn_loss(self, rpn_score, rpn_bbox_txtytwth,
+                      anchor_target_labels, anchor_target_bboxes_txtytwth,
+                      anchor_target_in_weights, anchor_target_out_weights):
+        rpn_score = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self._num_anchors]), (0, 2, 1)), [-1, 2])
+        rpn_selected = tf.where(anchor_target_labels >= 0)[:, 0]
+        rpn_score_selected = tf.gather(rpn_score, rpn_selected)
+        rpn_labels_selected = tf.gather(anchor_target_labels, rpn_selected)
+
+        rpn_cls_loss = cls_loss(logits=rpn_score_selected, labels=rpn_labels_selected)
+
+        rpn_reg_loss = smooth_l1_loss(rpn_bbox_txtytwth, anchor_target_bboxes_txtytwth,
+                                      anchor_target_in_weights, anchor_target_out_weights, self._rpn_sigma,
+                                      dim=[0, 1])
+        return rpn_cls_loss, rpn_reg_loss
+
+    def _get_roi_loss(self, roi_score, roi_bbox_txtytwth,
+                      proposal_target_labels, proposal_target_bboxes_txtytwth,
+                      proposal_target_in_weights, proposal_target_out_weights):
+        roi_cls_loss = cls_loss(logits=roi_score,
+                                labels=proposal_target_labels)
+
+        roi_reg_loss = smooth_l1_loss(roi_bbox_txtytwth, proposal_target_bboxes_txtytwth,
+                                      proposal_target_in_weights, proposal_target_out_weights,
+                                      sigma=self._roi_sigma)
+
+        return roi_cls_loss, roi_reg_loss
+
     def predict_rpn(self, image, gt_bboxes):
 
         image_shape = image.get_shape().as_list()[1:3]
@@ -181,8 +212,6 @@ class Vgg16FasterRcnn(tf.keras.Model):
         shared_features_shape = shared_features.get_shape().as_list()[1:3]
         tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
 
-        # anchors = self._anchor_generator(shape=shared_features_shape,
-        #                                  ratios=self._ratios, scales=self._scales) * self._extractor_stride
         anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
                                              tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
                                              tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
@@ -204,8 +233,6 @@ class Vgg16FasterRcnn(tf.keras.Model):
         shared_features_shape = shared_features.get_shape().as_list()[1:3]
         tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
 
-        # anchors = self._anchor_generator(shape=shared_features_shape,
-        #                                  ratios=self._ratios, scales=self._scales) * self._extractor_stride
         anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
                                              tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
                                              tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
@@ -275,60 +302,6 @@ class Vgg16FasterRcnn(tf.keras.Model):
             ])
             tf.logging.debug('successfully loaded weights for {}'.format(roi_head_dict[slim_tensor_name_pre]))
 
-    def _load_simple_faster_rcnn_pytorch_weights(self, pytorch_weights_dict):
-        extractor = self.get_layer('vgg16')
-        extractor_dict = {
-            "extractor.0.": "block1_conv1",
-            "extractor.2.": "block1_conv2",
-
-            "extractor.5.": "block2_conv1",
-            "extractor.7.": "block2_conv2",
-
-            "extractor.10.": "block3_conv1",
-            "extractor.12.": "block3_conv2",
-            "extractor.14.": "block3_conv3",
-
-            "extractor.17.": "block4_conv1",
-            "extractor.19.": "block4_conv2",
-            "extractor.21.": "block4_conv3",
-
-            "extractor.24.": "block5_conv1",
-            "extractor.26.": "block5_conv2",
-            "extractor.28.": "block5_conv3",
-        }
-        for pytorch_name in extractor_dict.keys():
-            extractor.get_layer(extractor_dict[pytorch_name]).set_weights([
-                pytorch_weights_dict[pytorch_name + 'weight'],
-                pytorch_weights_dict[pytorch_name + 'bias'],
-            ])
-
-        rpn_head = self.get_layer('rpn_head')
-        rpn_head_dict = {
-            'rpn.conv1.': 'rpn_first_conv',
-            'rpn.score.': 'rpn_score_conv',
-            'rpn.loc.': 'rpn_bbox_conv',
-        }
-        for pytorch_name in rpn_head_dict.keys():
-            print(pytorch_name, rpn_head_dict[pytorch_name])
-            rpn_head.get_layer(rpn_head_dict[pytorch_name]).set_weights([
-                pytorch_weights_dict[pytorch_name + 'weight'],
-                pytorch_weights_dict[pytorch_name + 'bias']
-            ])
-
-        roi_head = self.get_layer('roi_head')
-        roi_head_dict = {
-            'head.classifier.0.': 'fc1',
-            'head.classifier.2.': 'fc2',
-            'head.cls_loc.': 'roi_head_bboxes',
-            'head.score.': 'roi_head_score'
-        }
-        for pytorch_name in roi_head_dict.keys():
-            print(pytorch_name, roi_head_dict[pytorch_name])
-            roi_head.get_layer(roi_head_dict[pytorch_name]).set_weights([
-                pytorch_weights_dict[pytorch_name + 'weight'],
-                pytorch_weights_dict[pytorch_name + 'bias']
-            ])
-
     def test_one_image(self, img_path, min_size=600, max_size=1000, preprocessing_type='caffe'):
         from object_detection.dataset.tf_dataset_utils import preprocessing_func
         import numpy as np
@@ -392,3 +365,44 @@ class Vgg16FasterRcnn(tf.keras.Model):
         roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
 
         return shared_features, anchors, rpn_score, rpn_bbox_txtytwth, rois, roi_features, roi_score, roi_bboxes_txtytwth
+
+    def get_anchor_target_inputs(self, image, gt_bboxes):
+        image_shape = image.get_shape().as_list()[1:3]
+        tf.logging.debug('image shape is {}'.format(image_shape))
+
+        shared_features = self._extractor(image, training=True)
+        shared_features_shape = shared_features.get_shape().as_list()[1:3]
+        tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
+
+        anchors = self._anchor_generator(self._anchor_base, self._extractor_stride,
+                                         tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
+                                         tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
+                                         )
+
+        tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
+
+        rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=True)
+        return rpn_score, gt_bboxes, image_shape, anchors, self._num_anchors
+
+    def get_proposal_target_inputs(self, image):
+        image_shape = image.get_shape().as_list()[1:3]
+        tf.logging.debug('image shape is {}'.format(image_shape))
+
+        shared_features = self._extractor(image, training=True)
+        shared_features_shape = shared_features.get_shape().as_list()[1:3]
+        tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
+
+        anchors = self._anchor_generator(self._anchor_base, self._extractor_stride,
+                                         tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
+                                         tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
+                                         )
+
+        tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
+
+        rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=True)
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
+                                  training=True)
+        roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),
+                                         training=True)
+        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
+        return rois, roi_score, roi_bboxes_txtytwth

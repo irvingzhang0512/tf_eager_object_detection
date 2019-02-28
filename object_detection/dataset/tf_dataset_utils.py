@@ -65,8 +65,7 @@ def _caffe_preprocessing(image):
 
     image = tf.to_float(image)
     image = tf.reverse(image, axis=[-1])
-    means = [103.939, 116.779, 123.68]
-    # means = [102.9801, 115.9465, 122.7717]
+    means = [102.9801, 115.9465, 122.7717]
     channels = tf.split(axis=-1, num_or_size_splits=3, value=image)
     for i in range(3):
         channels[i] -= means[i]

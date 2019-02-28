@@ -43,7 +43,7 @@ class RPNHead(tf.keras.Model):
         x = self._rpn_conv(inputs)
 
         rpn_score = self._rpn_score_conv(x)
-        rpn_score_reshape = tf.reshape(rpn_score, [-1, self._num_anchors*2])
+        rpn_score_reshape = tf.reshape(rpn_score, [-1, self._num_anchors * 2])
 
         rpn_bbox = self._rpn_bbox_conv(x)
         rpn_bbox_reshape = tf.reshape(rpn_bbox, [-1, 4])
@@ -94,58 +94,78 @@ class AnchorTarget(tf.keras.Model):
         :param mask:
         :return:
         """
-        anchors, gt_bboxes, image_shape = inputs
+        gt_bboxes, image_shape, all_anchors, num_anchors = inputs
+        total_anchors = all_anchors.get_shape().as_list()[0]
 
         # 1. 对 anchors 进行过滤，筛选符合边界要求的 anchor，之后操作都基于筛选后的结果。
-        tf_logging.debug('rpn training, before filter has %d anchors' % anchors.shape[0])
-        selected_anchor_idx = bboxes_range_filter(anchors, image_shape[0], image_shape[1])
-        anchors = tf.gather(anchors, selected_anchor_idx)
+        tf_logging.debug('rpn training, before filter has %d anchors' % all_anchors.shape[0])
+        selected_anchor_idx = bboxes_range_filter(all_anchors, image_shape[0], image_shape[1])
+        anchors = tf.gather(all_anchors, selected_anchor_idx)
         tf_logging.debug('rpn training, after filter has %d anchors' % anchors.shape[0])
 
-        # 2. 计算 anchors 与gt_bboxes（即输入数据中的bbox）的iou。
+        # 准备工作
         labels = -tf.ones((anchors.shape[0],), tf.int32)
-        iou = pairwise_iou(anchors, gt_bboxes)  # [anchors_size, gt_bboxes_size]
+        overlaps = pairwise_iou(anchors, gt_bboxes)  # [anchors_size, gt_bboxes_size]
+        argmax_overlaps = tf.argmax(overlaps, axis=1, output_type=tf.int32)
+        max_overlaps = tf.reduce_max(overlaps, axis=1)
+        gt_max_overlaps = tf.reduce_max(overlaps, axis=0)
+        gt_argmax_overlaps = tf.where(tf.equal(overlaps, gt_max_overlaps))[:, 0]
 
-        # 3. 设置与 gt_bboxes 的 max_iou > pos_iou_threshold 的anchor为正例
-        #    设置 max_iou < neg_iou_threshold 的anchor为反例。
-        max_ious = tf.reduce_max(iou, axis=1)
-        labels = tf.where(max_ious >= self._pos_iou_threshold, tf.ones_like(labels), labels)
-        labels = tf.where(max_ious < self._neg_iou_threshold, tf.zeros_like(labels), labels)
+        # 设置labels
+        labels = tf.where(max_overlaps < self._neg_iou_threshold, tf.zeros_like(labels), labels)
+        labels = tf.scatter_update(tf.Variable(labels), gt_argmax_overlaps, 1)
+        labels = tf.where(max_overlaps >= self._pos_iou_threshold, tf.ones_like(labels), labels)
 
-        # 4. 设置与每个 gt_bboxes 的iou最大的anchor为正例。
-        # 获取与每个 gt_bboxes 的 iou 最大的anchor的编号，设置这些anchor为正例，并修改对应 argmax_ious
-        # 想要实现 labels[gt_argmax_ious] = 1, argmax_ious[gt_argmax_ious] = np.arange(len(gt_argmax_ious))
-        argmax_ious = tf.argmax(iou, axis=1, output_type=tf.int32)
-        gt_argmax_ious = tf.argmax(iou, axis=0, output_type=tf.int32)  # [gt_bboxes_size]
-        labels = tf.scatter_update(tf.Variable(labels), gt_argmax_ious, 1)
-        argmax_ious = tf.scatter_update(tf.Variable(argmax_ious), gt_argmax_ious, tf.range(0, tf.size(gt_argmax_ious)))
+        # 筛选正例反例
+        fg_inds = tf.where(tf.equal(labels, 1))[:, 0]
+        if tf.size(fg_inds) > self._max_pos_samples:
+            disable_inds = tf.random_shuffle(fg_inds)[self._max_pos_samples:]
+            labels = tf.scatter_update(tf.Variable(labels), disable_inds, -1)
+        num_bg = self._total_num_samples - tf.reduce_sum(tf.to_int32(tf.equal(labels, 1)))
+        bg_inds = tf.where(tf.equal(labels, 0))[:, 0]
+        if tf.size(bg_inds) > num_bg:
+            disable_inds = tf.random_shuffle(bg_inds)[num_bg:]
+            labels = tf.scatter_update(tf.Variable(labels), disable_inds, -1)
 
-        # 筛选正例和反例
-        pos_index = tf.where(tf.equal(labels, 1))[:, 0]
-        neg_index = tf.where(tf.equal(labels, 0))[:, 0]
-        total_pos_num = tf.size(pos_index)  # 计算正例真实数量
-        total_neg_num = tf.size(neg_index)  # 计算正例真实数量
-        cur_pos_num = tf.minimum(total_pos_num, self._max_pos_samples)  # 根据要求，修正正例数量
-        cur_neg_num = tf.minimum(self._total_num_samples - cur_pos_num, total_neg_num)  # 根据要求，修正反例数量
-        pos_index = tf.random_shuffle(pos_index)[:cur_pos_num]  # 随机选择正例
-        neg_index = tf.random_shuffle(neg_index)[:cur_neg_num]  # 随机选择反例
-        tf_logging.debug('rpn training has %d pos samples and %d neg samples' % (cur_pos_num, cur_neg_num))
+        # 计算 bboxes targets，作为 rpn reg loss 的 ground truth
+        bboxes_targets = encode_bbox_with_mean_and_std(anchors, tf.gather(gt_bboxes, argmax_overlaps),
+                                                       target_means=self._target_means,
+                                                       target_stds=self._target_stds)
 
-        # 该编号是 anchors filter 之后的编号，而不是原始anchors中的编号
-        selected_idx = tf.concat([pos_index, neg_index], axis=0)
+        # 只有整理才有 reg loss
+        bbox_inside_weights = tf.zeros((anchors.shape[0], 4), dtype=tf.float32)
+        bbox_inside_weights = tf.scatter_update(tf.Variable(bbox_inside_weights),
+                                                tf.where(tf.equal(labels, 1))[:, 0], 1)
 
-        # 计算 rpn training 中 reg loss 的 gt
-        selected_gt_bboxes = tf.gather(gt_bboxes, tf.gather(argmax_ious, pos_index))
-        selected_pred_bboxes = tf.gather(anchors, pos_index)
-        rpn_gt_txtytwth = encode_bbox_with_mean_and_std(selected_pred_bboxes, selected_gt_bboxes,
-                                                        self._target_means, self._target_stds)
-
-        target_anchors_idx = tf.gather(selected_anchor_idx, selected_idx)
-        target_labels = tf.gather(labels, selected_idx)
+        # 实质就是对 reg loss / num_rpn_samples
+        bbox_outside_weights = tf.zeros((anchors.shape[0], 4), dtype=tf.float32)
+        num_examples = tf.reduce_sum(tf.to_float(labels >= 0))
+        bbox_outside_weights = tf.scatter_update(tf.Variable(bbox_outside_weights),
+                                                 tf.where(labels >= 0)[:, 0], 1.0 / num_examples)
 
         # 生成最终结果
-        return tf.stop_gradient(target_anchors_idx), tf.stop_gradient(target_labels), \
-               tf.stop_gradient(rpn_gt_txtytwth), tf.stop_gradient(cur_pos_num)
+        return tf.stop_gradient(_unmap(labels, total_anchors, selected_anchor_idx, -1)), \
+               tf.stop_gradient(_unmap(bboxes_targets, total_anchors, selected_anchor_idx, 0)), \
+               tf.stop_gradient(_unmap(bbox_inside_weights, total_anchors, selected_anchor_idx, 0)), \
+               tf.stop_gradient(_unmap(bbox_outside_weights, total_anchors, selected_anchor_idx, 0))
+
+
+def _unmap(data, count, inds, fill=0):
+    """
+    将 filter anchors 后的结果映射到 原始 anchors 中，主要就是 index 的转换
+    :param data:
+    :param count:
+    :param inds:
+    :param fill:
+    :return:
+    """
+    if len(data.shape) == 1:
+        ret = tf.ones([count], dtype=tf.float32) * fill
+        ret = tf.scatter_update(tf.Variable(ret), inds, tf.to_float(data))
+    else:
+        ret = tf.ones([count, ] + data.get_shape().as_list()[1:], dtype=tf.float32) * fill
+        ret = tf.scatter_update(tf.Variable(ret), inds, tf.to_float(data))
+    return ret
 
 
 class RegionProposal(tf.keras.Model):
@@ -206,12 +226,10 @@ class RegionProposal(tf.keras.Model):
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, _ = bboxes_clip_filter(decoded_bboxes, 0, image_shape[0], image_shape[1])
 
-        # scores = tf.reshape(tf.transpose(tf.reshape(scores, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
-        # scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
-        # scores = tf.reshape(scores, [-1, 2*self._num_anchors])
-        # scores = tf.reshape(scores[..., self._num_anchors:], [-1])
-
-        scores = tf.nn.softmax(tf.reshape(scores, [-1, 2]))[:, 1]
+        scores = tf.reshape(tf.transpose(tf.reshape(scores, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
+        scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
+        scores = tf.reshape(scores, [-1, 2 * self._num_anchors])
+        scores = tf.reshape(scores[..., self._num_anchors:], [-1])
 
         # 3. 根据rpn_score获取num_pre_nms个anchors。
         num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
