@@ -121,7 +121,7 @@ if __name__ == '__main__':
     from object_detection.utils.visual_utils import draw_bboxes_with_labels
 
     for idx, (cur_image, cur_bboxes, cur_labels, cur_labels_text) in enumerate(d):
-        cur_means = [103.939, 116.779, 123.68]
+        cur_means = [102.9801, 115.9465, 122.7717]
         cur_image = tf.squeeze(cur_image, axis=0).numpy()
         cur_image[..., 0] += cur_means[0]
         cur_image[..., 1] += cur_means[1]

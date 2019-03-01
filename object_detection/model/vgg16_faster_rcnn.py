@@ -154,7 +154,6 @@ class Vgg16FasterRcnn(tf.keras.Model):
             roi_cls_loss, roi_reg_loss = self._get_roi_loss(roi_score, roi_bboxes_txtytwth,
                                                             roi_labels, roi_bbox_target,
                                                             roi_in_weights, roi_out_weights)
-
             return rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss
         else:
             # 预测时，计算所有 region proposal 生成的 roi 的 roi_features，默认为300个
@@ -183,7 +182,6 @@ class Vgg16FasterRcnn(tf.keras.Model):
         rpn_selected = tf.where(anchor_target_labels >= 0)[:, 0]
         rpn_score_selected = tf.gather(rpn_score, rpn_selected)
         rpn_labels_selected = tf.gather(anchor_target_labels, rpn_selected)
-
         rpn_cls_loss = cls_loss(logits=rpn_score_selected, labels=rpn_labels_selected)
 
         rpn_reg_loss = smooth_l1_loss(rpn_bbox_txtytwth, anchor_target_bboxes_txtytwth,
@@ -246,7 +244,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
                                                                                  gt_labels, image_shape), True)
         return tf.gather(rois, roi_training_idx[:roi_pos_num]), roi_gt_labels[:roi_pos_num]
 
-    def _load_tf_faster_rcnn_tf_weights(self, ckpt_file_path):
+    def load_tf_faster_rcnn_tf_weights(self, ckpt_file_path):
         reader = tf.train.load_checkpoint(ckpt_file_path)
         extractor = self.get_layer('vgg16')
         extractor_dict = {
@@ -406,3 +404,60 @@ class Vgg16FasterRcnn(tf.keras.Model):
                                          training=True)
         roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
         return rois, roi_score, roi_bboxes_txtytwth
+
+    def get_roi_loss_by_rpn_rois(self, image, rois, gt_bboxes, gt_labels):
+        shared_features = self._extractor(image)
+
+        # roi loss
+        final_rois, roi_labels, roi_bbox_target, roi_in_weights, roi_out_weights = self._proposal_target((rois,
+                                                                                                          gt_bboxes,
+                                                                                                          gt_labels,
+                                                                                                          ),
+                                                                                                         True)
+        # 训练时，只计算 proposal target 的 roi_features，一般只有128个
+        roi_features = self._roi_pooling((shared_features, final_rois, self._extractor_stride),
+                                         training=True)
+        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
+        roi_cls_loss, roi_reg_loss = self._get_roi_loss(roi_score, roi_bboxes_txtytwth,
+                                                        roi_labels, roi_bbox_target,
+                                                        roi_in_weights, roi_out_weights)
+        return roi_cls_loss, roi_reg_loss, final_rois, roi_labels, roi_bbox_target, roi_in_weights, roi_out_weights
+
+    def get_rpn_loss_by_rois(self, image, rpn_labels, rpn_bbox_targets, rpn_in_weights, rpn_out_weights):
+        shared_features = self._extractor(image)
+        rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=True)
+        rpn_labels = tf.reshape(rpn_labels, [-1, 18])
+        rpn_bbox_targets = tf.reshape(rpn_bbox_targets, [-1, 36])
+        rpn_in_weights = tf.reshape(rpn_in_weights, [-1, 36])
+        rpn_out_weights = tf.reshape(rpn_out_weights, [-1, 36])
+        rpn_cls_loss, rpn_reg_loss = self._get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
+                                                        rpn_labels, rpn_bbox_targets,
+                                                        rpn_in_weights, rpn_out_weights)
+        return rpn_cls_loss, rpn_reg_loss
+
+    def im_detect(self, image, img_scale):
+        image_shape = image.get_shape().as_list()[1:3]
+        tf.logging.debug('image shape is {}'.format(image_shape))
+
+        shared_features = self._extractor(image, training=False)
+        shared_features_shape = shared_features.get_shape().as_list()[1:3]
+        tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
+
+        anchors = self._anchor_generator(self._anchor_base, self._extractor_stride,
+                                         tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
+                                         tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
+                                         )
+
+        tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
+
+        rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=False)
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
+                                  training=False)
+
+        roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),
+                                         training=False)
+        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
+
+        roi_score_softmax = tf.nn.softmax(roi_score)
+
+        return roi_score_softmax, roi_bboxes_txtytwth, rois

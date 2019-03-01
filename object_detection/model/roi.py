@@ -145,21 +145,17 @@ class ProposalTarget(tf.keras.Model):
         :return:
         """
         rois, gt_bboxes, gt_labels = inputs
-        print(rois.shape, gt_bboxes.shape, gt_labels.shape)
 
         iou = pairwise_iou(rois, gt_bboxes)  # [rois_size, gt_bboxes_size]
         max_overlaps = tf.reduce_max(iou, axis=1)  # [rois_size, ]
         gt_assignment = tf.argmax(iou, axis=1)  # [rois_size, ]
         labels = tf.gather(gt_labels, gt_assignment)  # [rois_size, ]
-        print(iou.shape, max_overlaps.shape, gt_assignment.shape, labels.shape)
 
         # 根据条件获取 前景 背景
         fg_inds = tf.where(max_overlaps > self._pos_iou_threshold)[:, 0]
         # bg_inds = tf.where(tf.logical_and(max_overlaps < self._pos_iou_threshold,
         #                                   max_overlaps >= self._neg_iou_threshold))[:, 0]
         bg_inds = tf.where(max_overlaps < self._pos_iou_threshold)[:, 0]
-        print(fg_inds.shape)
-        print(bg_inds.shape)
 
         # 筛选 前景/背景
         if tf.size(fg_inds) > self._max_pos_samples:

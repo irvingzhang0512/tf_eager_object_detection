@@ -7,7 +7,6 @@ matplotlib.use('agg')
 
 from object_detection.model.vgg16_faster_rcnn import Vgg16FasterRcnn
 from object_detection.config.faster_rcnn_config import COCO_CONFIG, PASCAL_CONFIG
-from object_detection.utils.pascal_voc_map_utils import eval_detection_voc
 from object_detection.utils.visual_utils import show_one_image
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as pascal_get_dataset
 from object_detection.dataset.coco_tf_dataset_generator import get_dataset as coco_get_dataset
@@ -29,46 +28,43 @@ elif DATASET_TYPE == 'coco':
 else:
     raise ValueError('Unknown Dataset Type')
 
-# train_records_list = [
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
-# ]
-# eval_records_list = [
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
-#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
-# ]
-# cur_train_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs-new'
-# cur_val_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs-new/val'
-# cur_ckpt_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs-new'
-# coco_root_path = "/home/tensorflow05/data/COCO2017"
-# tf_faster_rcnn_ckpt_file_path = '/home/tensorflow05/data/voc_2007_trainval/vgg16_faster_rcnn_iter_70000.ckpt'
-
-
 train_records_list = [
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
 ]
 eval_records_list = [
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
-    '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
+    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
 ]
-cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1'
-cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1/val'
-cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1'
-coco_root_path = "/ssd/zhangyiyang/COCO2017"
-tf_faster_rcnn_ckpt_file_path = '/ssd/zhangyiyang/voc_2007_trainval/vgg16_faster_rcnn_iter_70000.ckpt'
+cur_train_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs/logs-pascal/train'
+cur_ckpt_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs/logs-pascal/ckpt'
+coco_root_path = "/home/tensorflow05/data/COCO2017"
+
+
+# train_records_list = [
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
+# ]
+# eval_records_list = [
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
+#     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
+# ]
+# cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1'
+# cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1/val'
+# cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1'
+# coco_root_path = "/ssd/zhangyiyang/COCO2017"
 
 
 # train_records_list = [
@@ -159,11 +155,11 @@ def _get_default_vgg16_model():
 
 
 def _get_default_optimizer():
-    lr = tf.train.exponential_decay(CONFIG['learning_rate_start'],
-                                    tf.train.get_or_create_global_step(),
-                                    CONFIG['learning_rate_decay_steps'],
-                                    CONFIG['learning_rate_decay_rate'],
-                                    True)
+    lr = tf.train.exponential_decay(learning_rate=CONFIG['learning_rate_start'],
+                                    global_step=tf.train.get_or_create_global_step(),
+                                    decay_steps=CONFIG['learning_rate_decay_steps'],
+                                    decay_rate=CONFIG['learning_rate_decay_rate'],
+                                    staircase=True)
     return tf.train.MomentumOptimizer(lr, momentum=CONFIG['optimizer_momentum'])
 
 
@@ -175,22 +171,6 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal'):
                                      argument=False, )
     elif dataset_type == 'coco':
         dataset = coco_get_dataset(root_dir=coco_root_path, mode='train',
-                                   min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
-                                   preprocessing_type=preprocessing_type,
-                                   argument=False, )
-    else:
-        raise ValueError('unknown dataset type {}'.format(dataset_type))
-    return dataset
-
-
-def _get_evaluating_dataset(preprocessing_type='caffe', dataset_type='pascal'):
-    if dataset_type == 'pascal':
-        dataset = pascal_get_dataset(eval_records_list,
-                                     min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
-                                     preprocessing_type=preprocessing_type,
-                                     argument=False, )
-    elif dataset_type == 'coco':
-        dataset = coco_get_dataset(root_dir=coco_root_path, mode='val',
                                    min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
                                    preprocessing_type=preprocessing_type,
                                    argument=False, )
@@ -231,23 +211,28 @@ def train_one_epoch(dataset, base_model, optimizer,
     total_mean = MeanOps()
 
     for image, gt_bboxes, gt_labels, _ in tqdm(dataset):
+        # conver ymin xmin ymax xmax -> xmin ymin xmax ymax
         gt_bboxes = tf.squeeze(gt_bboxes, axis=0)
+        channels = tf.split(gt_bboxes, 4, axis=1)
+        gt_bboxes = tf.concat([
+            channels[1], channels[0], channels[3], channels[2]
+        ], axis=1)
+
         gt_labels = tf.to_int32(tf.squeeze(gt_labels, axis=0))
+
         with tf.GradientTape() as tape:
             rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = base_model((image, gt_bboxes, gt_labels), True)
             l2_loss = tf.add_n(base_model.losses)
-            # total_loss = rpn_cls_loss + rpn_reg_loss
-            # total_loss = roi_cls_loss + roi_reg_loss
             total_loss = rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss + l2_loss
+
+            train_step(base_model, total_loss, tape, optimizer)
+
+        if idx % summary_every_n_steps == 0:
             rpn_cls_mean.update(rpn_cls_loss)
             rpn_reg_mean.update(rpn_reg_loss)
             roi_cls_mean.update(roi_cls_loss)
             roi_reg_mean.update(roi_reg_loss)
             total_mean.update(total_loss)
-
-            train_step(base_model, total_loss, tape, optimizer)
-
-        if idx % summary_every_n_steps == 0:
             summary.scalar("rpn_cls_loss", rpn_cls_mean.mean())
             summary.scalar("rpn_reg_loss", rpn_reg_mean.mean())
             summary.scalar("roi_cls_loss", roi_cls_mean.mean())
@@ -277,48 +262,14 @@ def train_one_epoch(dataset, base_model, optimizer,
         idx += 1
 
 
-def evaluate(dataset, base_model, use_07_metric=False):
-    gt_bboxes = []
-    gt_labels = []
-    pred_bboxes = []
-    pred_labels = []
-    pred_scores = []
+def train(training_dataset, base_model, optimizer,
+          logging_every_n_steps=100,
+          save_every_n_steps=2000,
+          summary_every_n_steps=10,
 
-    useless_pics = 0
-
-    for cur_image, cur_gt_bboxes, cur_gt_labels, _ in tqdm(dataset):
-        cur_gt_bboxes = tf.squeeze(cur_gt_bboxes, axis=0)
-        cur_gt_labels = tf.to_int32(tf.squeeze(cur_gt_labels, axis=0))
-
-        cur_pred_bboxes, cur_pred_labels, cur_pred_scores = base_model(cur_image, False)
-
-        if cur_pred_bboxes is not None:
-            gt_bboxes.append(cur_gt_bboxes.numpy())
-            gt_labels.append(cur_gt_labels.numpy())
-            pred_bboxes.append(cur_pred_bboxes.numpy())
-            pred_labels.append(cur_pred_labels.numpy())
-            pred_scores.append(cur_pred_scores.numpy())
-        else:
-            useless_pics += 1
-
-    tf_logging.info('useless img number is {}'.format(useless_pics))
-    return eval_detection_voc(
-        pred_bboxes, pred_labels, pred_scores,
-        gt_bboxes, gt_labels,
-        gt_difficults=None,
-        iou_thresh=CONFIG['evaluate_iou_threshold'],
-        use_07_metric=use_07_metric)
-
-
-def train_eval(training_dataset, evaluating_dataset, base_model, optimizer,
-               logging_every_n_steps=100,
-               save_every_n_steps=2000,
-               summary_every_n_steps=10,
-
-               train_dir=cur_train_dir,
-               val_dir=cur_val_dir,
-               ckpt_dir=cur_ckpt_dir,
-               ):
+          train_dir=cur_train_dir,
+          ckpt_dir=cur_ckpt_dir,
+          ):
     saver = eager_saver.Saver(base_model.variables)
 
     # load saved ckpt files
@@ -328,7 +279,6 @@ def train_eval(training_dataset, evaluating_dataset, base_model, optimizer,
 
     tf.train.get_or_create_global_step()
     train_writer = tf.contrib.summary.create_file_writer(train_dir, flush_millis=100000)
-    val_writer = tf.contrib.summary.create_file_writer(val_dir, flush_millis=10000)
     for i in range(CONFIG['epochs']):
         tf_logging.info('epoch %d starting...' % (i + 1))
         start = time.time()
@@ -343,13 +293,6 @@ def train_eval(training_dataset, evaluating_dataset, base_model, optimizer,
         train_end = time.time()
         tf_logging.info('epoch %d training finished, costing %d seconds, start evaluating...' % (i + 1,
                                                                                                  train_end - start))
-        with val_writer.as_default(), summary.always_record_summaries():
-            res = evaluate(evaluating_dataset, base_model)
-            summary.scalar('map', res['map'])
-            for cls_id in range(1, CONFIG['num_classes']):
-                summary.scalar('class_{}'.format(cls_id), res['ap'][cls_id])
-            tf_logging.info('epoch %d evaluating finished, costing %d seconds, ' % (i + 1, time.time() - train_end))
-            tf_logging.info('current ap is {}, current map is {}'.format(res['ap'], res['map']))
 
 
 if __name__ == '__main__':
@@ -357,7 +300,6 @@ if __name__ == '__main__':
 
     cur_model = _get_default_vgg16_model()
     cur_training_dataset = _get_training_dataset('caffe', DATASET_TYPE)
-    cur_evaluation_dataset = _get_evaluating_dataset('caffe', DATASET_TYPE)
 
     cur_optimizer = _get_default_optimizer()
-    train_eval(cur_training_dataset, cur_evaluation_dataset, cur_model, cur_optimizer)
+    train(cur_training_dataset, cur_model, cur_optimizer)

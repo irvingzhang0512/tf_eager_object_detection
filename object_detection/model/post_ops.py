@@ -132,10 +132,13 @@ def post_ops_prediction(roi_scores_softmax, roi_txtytwth, rois, image_shape,
     for i in range(1, num_classes):
         inds = tf.where(roi_scores_softmax[:, i] > score_threshold)[:, 0]
         cls_score = tf.gather(roi_scores_softmax[:, i], inds)
-        final_bboxes = decode_bbox_with_mean_and_std(rois, roi_txtytwth[:, i, :],
+        final_bboxes = decode_bbox_with_mean_and_std(tf.gather(rois, inds),
+                                                     tf.gather(roi_txtytwth[:, i, :], inds),
                                                      target_means, target_stds)
-        final_bboxes, _ = bboxes_clip_filter_tf(final_bboxes, 0, image_shape[0], image_shape[1])
-        final_bboxes = tf.gather(final_bboxes, inds)
+        final_bboxes, clip_selected_idx = bboxes_clip_filter_tf(final_bboxes, 0,
+                                                                image_shape[0], image_shape[1],
+                                                                extractor_stride)
+        cls_score = tf.gather(cls_score, clip_selected_idx)
 
         keep = tf.image.non_max_suppression(final_bboxes, cls_score, max_num_per_class, iou_threshold=nms_iou_threshold)
         if tf.size(keep).numpy() == 0:
