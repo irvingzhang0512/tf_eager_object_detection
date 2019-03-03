@@ -13,6 +13,9 @@ from object_detection.model.vgg16_faster_rcnn import Vgg16FasterRcnn
 from object_detection.config.faster_rcnn_config import PASCAL_CONFIG as CONFIG
 from tensorflow.contrib.eager.python import saver as eager_saver
 
+tf.enable_eager_execution()
+tf.logging.set_verbosity(tf.logging.INFO)
+
 num_classes = 21,
 class_list = ('__background__',  # always index 0
               'aeroplane', 'bicycle', 'bird', 'boat',
@@ -73,7 +76,7 @@ def eval_by_local_files_and_gt_xmls(root_path,
                                     result_file_format,
                                     cache_dir,
                                     prediction_iou_threshold=CONFIG['evaluate_iou_threshold'], ):
-    annotation_file_format = os.path.join(root_path, 'Annotations', "{:s}.xml")
+    annotation_file_format = os.path.join(root_path, 'Annotations', "{}.xml")
     imagesetfile = os.path.join(root_path, 'ImageSets', 'Main', 'test.txt')
     all_ap = .0
     for cls_name in class_list:
@@ -154,6 +157,8 @@ def _load_from_ckpt_file(model, ckpt_file_path):
     if tf.train.latest_checkpoint(ckpt_file_path) is not None:
         saver.restore(tf.train.latest_checkpoint(ckpt_file_path))
         tf.logging.info('restore from {}...'.format(tf.train.latest_checkpoint(ckpt_file_path)))
+    else:
+        raise ValueError('unknown ckpt file {}'.format(ckpt_file_path))
 
 
 def parse_args():
@@ -162,16 +167,23 @@ def parse_args():
   """
     parser = argparse.ArgumentParser(description='Evaluate a Fast R-CNN model')
     parser.add_argument('ckpt_file_path', type=str, help='target ckpt file path', )
-    parser.add_argument('--use_tf_faster_rcnn_model', default=True, type=bool)
+    parser.add_argument('--use_tf_faster_rcnn_model', default=False, type=bool)
     parser.add_argument('--use_local_result_files', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
-                        default='tf', type=str)
+                        default='cv2', type=str)
     parser.add_argument('--root_path', help='path to pascal voc 2007',
-                        default='/home/tensorflow05/data/VOCdevkit/VOC2007', type=str)
+                        default='D:\\data\\VOCdevkit\\VOC2007', type=str)
     parser.add_argument('--result_file_format', help='local detection result file pattern',
-                        default='/home/tensorflow05/zyy/tf_eager_object_detection/results/{:s}.txt', type=str)
+                        default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
     parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-                        default='/home/tensorflow05/zyy/tf_eager_object_detection/results', type=str)
+                        default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
+
+    # parser.add_argument('--root_path', help='path to pascal voc 2007',
+    #                     default='/home/tensorflow05/data/VOCdevkit/VOC2007', type=str)
+    # parser.add_argument('--result_file_format', help='local detection result file pattern',
+    #                     default='/home/tensorflow05/zyy/tf_eager_object_detection/results/{:s}.txt', type=str)
+    # parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
+    #                     default='/home/tensorflow05/zyy/tf_eager_object_detection/results', type=str)
 
     if len(sys.argv) == 1:
         parser.print_help()

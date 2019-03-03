@@ -19,6 +19,7 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 tf.enable_eager_execution()
+tf_logging.set_verbosity(tf_logging.INFO)
 
 DATASET_TYPE = 'pascal'
 if DATASET_TYPE == 'pascal':
@@ -28,23 +29,23 @@ elif DATASET_TYPE == 'coco':
 else:
     raise ValueError('Unknown Dataset Type')
 
-train_records_list = [
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
-]
-eval_records_list = [
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
-    '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
-]
-cur_train_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs/logs-pascal/train'
-cur_ckpt_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs/logs-pascal/ckpt'
-coco_root_path = "/home/tensorflow05/data/COCO2017"
+# train_records_list = [
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_00.tfrecords',
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_01.tfrecords',
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_02.tfrecords',
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_03.tfrecords',
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_trainval_04.tfrecords',
+# ]
+# eval_records_list = [
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_00.tfrecords',
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_01.tfrecords',
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_02.tfrecords',
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_03.tfrecords',
+#     '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
+# ]
+# cur_train_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs/logs-pascal/train'
+# cur_ckpt_dir = '/home/tensorflow05/zyy/tf_eager_object_detection/logs/logs-pascal/ckpt'
+# coco_root_path = "/home/tensorflow05/data/COCO2017"
 
 
 # train_records_list = [
@@ -62,34 +63,26 @@ coco_root_path = "/home/tensorflow05/data/COCO2017"
 #     '/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records/pascal_test_04.tfrecords',
 # ]
 # cur_train_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1'
-# cur_val_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1/val'
 # cur_ckpt_dir = '/ssd/zhangyiyang/tf_eager_object_detection/logs-pascal-1'
 # coco_root_path = "/ssd/zhangyiyang/COCO2017"
 
 
-# train_records_list = [
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_00.tfrecords',
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_01.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_02.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_03.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_04.tfrecords'
-# ]
-# eval_records_list = [
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_00.tfrecords',
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_01.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_02.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_03.tfrecords'
-#     'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_04.tfrecords'
-# ]
-# cur_train_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs-coco'
-# cur_val_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs-coco\\val'
-# cur_ckpt_dir = 'E:\\PycharmProjects\\tf_eager_object_detection\\logs-coco'
-# coco_root_path = 'D:\\data\\COCO2017'
+train_records_list = [
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_trainval_00.tfrecords',
+]
+eval_records_list = [
+    'D:\\data\\VOCdevkit\\tf_eager_records\\pascal_test_00.tfrecords',
+]
+cur_train_dir = 'D:\\data\\logs\\logs-pascal\\train'
+cur_ckpt_dir = 'D:\\data\\logs\\logs-pascal\\ckpt'
+coco_root_path = 'D:\\data\\COCO2017'
 
 
 def apply_gradients(model, optimizer, gradients):
+    all_vars = model.variables
     if CONFIG['learning_rate_bias_double']:
         all_grads = []
+        all_vars = []
         for grad, var in zip(gradients, model.variables):
             if grad is None:
                 continue
@@ -97,8 +90,9 @@ def apply_gradients(model, optimizer, gradients):
             if 'biases' in var.name:
                 scale = 2.0
             all_grads.append(grad * scale)
+            all_vars.append(var)
         gradients = all_grads
-    optimizer.apply_gradients(zip(gradients, model.variables),
+    optimizer.apply_gradients(zip(gradients, all_vars),
                               global_step=tf.train.get_or_create_global_step())
 
 
@@ -201,7 +195,8 @@ class MeanOps:
 def train_one_epoch(dataset, base_model, optimizer,
                     logging_every_n_steps=20,
                     summary_every_n_steps=50,
-                    saver=None, save_every_n_steps=2500, save_path=None):
+                    saver=None, save_every_n_steps=2500, save_path=None,
+                    show_score_threshold=0.3):
     idx = 0
 
     rpn_cls_mean = MeanOps()
@@ -249,13 +244,29 @@ def train_one_epoch(dataset, base_model, optimizer,
                             )
             pred_bboxes, pred_labels, pred_scores = base_model(image, False)
 
-            gt_image = show_one_image(tf.squeeze(image, axis=0).numpy(), gt_bboxes.numpy(), gt_labels.numpy())
-            tf.contrib.summary.image("gt_image", tf.expand_dims(gt_image, axis=0))
-
             if pred_bboxes is not None:
-                pred_image = show_one_image(tf.squeeze(image, axis=0).numpy(), pred_bboxes.numpy(), pred_labels.numpy())
-                tf.contrib.summary.image("pred_image", tf.expand_dims(pred_image, axis=0))
+                selected_idx = tf.where(pred_scores >= show_score_threshold)[:, 0]
+                if tf.size(selected_idx) != 0:
+                    # gt
+                    gt_channels = tf.split(gt_bboxes, 4, axis=1)
+                    show_gt_bboxes = tf.concat([gt_channels[1], gt_channels[0], gt_channels[3], gt_channels[2]], axis=1)
+                    gt_image = show_one_image(tf.squeeze(image, axis=0).numpy(), show_gt_bboxes.numpy(),
+                                              gt_labels.numpy())
+                    tf.contrib.summary.image("gt_image", tf.expand_dims(gt_image, axis=0))
 
+                    # pred
+                    pred_bboxes = tf.gather(pred_bboxes, selected_idx)
+                    pred_labels = tf.gather(pred_labels, selected_idx)
+                    channels = tf.split(pred_bboxes, num_or_size_splits=4, axis=1)
+                    show_pred_bboxes = tf.concat([
+                        channels[1], channels[0], channels[3], channels[2]
+                    ], axis=1)
+                    pred_image = show_one_image(tf.squeeze(image, axis=0).numpy(),
+                                                show_pred_bboxes.numpy(),
+                                                pred_labels.numpy())
+                    tf.contrib.summary.image("pred_image", tf.expand_dims(pred_image, axis=0))
+
+        # if saver is not None and save_path is not None and idx % save_every_n_steps == 0:
         if saver is not None and save_path is not None and idx % save_every_n_steps == 0:
             saver.save(os.path.join(save_path, 'model.ckpt'), global_step=tf.train.get_or_create_global_step())
 
@@ -264,7 +275,7 @@ def train_one_epoch(dataset, base_model, optimizer,
 
 def train(training_dataset, base_model, optimizer,
           logging_every_n_steps=100,
-          save_every_n_steps=2000,
+          save_every_n_steps=5000,
           summary_every_n_steps=10,
 
           train_dir=cur_train_dir,
@@ -296,7 +307,6 @@ def train(training_dataset, base_model, optimizer,
 
 
 if __name__ == '__main__':
-    tf_logging.set_verbosity(tf_logging.INFO)
 
     cur_model = _get_default_vgg16_model()
     cur_training_dataset = _get_training_dataset('caffe', DATASET_TYPE)

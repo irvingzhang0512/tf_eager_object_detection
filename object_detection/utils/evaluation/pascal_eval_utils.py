@@ -23,7 +23,8 @@ def get_prediction_files(cur_model,
                          result_file_format='/home/tensorflow05/zyy/tf_eager_object_detection/results/{:s}.txt',
                          score_threshold=0.0, iou_threshold=0.5,
                          max_objects_per_class=50, max_objects_per_image=50,
-                         target_means=None, target_stds=None):
+                         target_means=None, target_stds=None,
+                         min_edge=10):
     if dataset_type == 'cv2':
         eval_dataset, image_sets = get_dataset_by_local_file(mode, data_root_path)
     elif dataset_type == 'tf':
@@ -51,7 +52,7 @@ def get_prediction_files(cur_model,
             cls_boxes = decode_bbox_with_mean_and_std(tf.gather(rois, inds),
                                                       tf.gather(roi_txtytwth[:, j, :], inds),
                                                       target_means=target_means, target_stds=target_stds)
-            cls_boxes, inds = bboxes_clip_filter(cls_boxes, 0, raw_h, raw_w, 10)
+            cls_boxes, inds = bboxes_clip_filter(cls_boxes, 0, raw_h, raw_w, min_edge)
             cls_scores = tf.gather(cls_scores, inds).numpy()
             cls_boxes = cls_boxes.numpy()
 
@@ -80,7 +81,7 @@ def get_prediction_files(cur_model,
         with open(filename, 'wt') as f:
             for im_ind, index in enumerate(image_sets):
                 dets = np.array(all_boxes[cls_ind][im_ind])
-                if not dets:
+                if dets == []:
                     continue
                 # the VOCdevkit expects 1-based indices
                 for k in range(dets.shape[0]):

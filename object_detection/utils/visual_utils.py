@@ -21,17 +21,20 @@ def draw_bboxes_with_labels(image, bboxes, label_texts):
         label_texts = label_texts.numpy()
     idx = 0
     for bbox in bboxes:
-        ymin, xmin, ymax, xmax = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-        cv2.rectangle(image, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
-        if label_texts is not None:
-            cv2.putText(img=image,
-                        text=str(label_texts[idx]),
-                        org=(xmin, ymin + 20),
-                        fontFace=cv2.FONT_HERSHEY_COMPLEX,
-                        fontScale=1e-3 * image.shape[0],
-                        color=(0, 0, 255),
-                        thickness=2
+        try:
+            ymin, xmin, ymax, xmax = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            cv2.rectangle(image, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
+            if label_texts is not None:
+                cv2.putText(img=image,
+                            text=str(label_texts[idx]),
+                            org=(xmin, ymin + 20),
+                            fontFace=cv2.FONT_HERSHEY_COMPLEX,
+                            fontScale=1e-3 * image.shape[0],
+                            color=(0, 0, 255),
+                            thickness=2
                         )
+        except:
+            print(bbox, bboxes.shape)
         idx += 1
     return image
 
@@ -53,7 +56,6 @@ def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', fig
     if isinstance(labels_text, tf.Tensor):
         labels_text = labels_text.numpy()
     # 因为原始数据中，将 bboxes 范围限定在 [0, height-1] [0, width - 1] 中，所以显示的时候，要要返回1
-    bboxes = np.array(bboxes) + 1
     if preprocess_type == 'caffe':
         cur_means = [102.9801, 115.9465, 122.7717]
         image[..., 0] += cur_means[0]

@@ -82,6 +82,7 @@ class RoiHead(tf.keras.Model):
             cache_subdir='models',
             file_hash='64373286793e3c8b2b4e3219cbf3544b')
         self.load_weights(weights_path, by_name=True)
+        tf.logging.info('successfully load pretrained weights for roi head.')
 
     def call(self, inputs, training=None):
         """
