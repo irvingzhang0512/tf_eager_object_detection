@@ -141,17 +141,11 @@ class RoiPooling(tf.keras.Model):
         batch_ids = tf.zeros([tf.shape(rois)[0]], dtype=tf.int32)
         h, w = shared_layers.get_shape().as_list()[1:3]
         roi_channels = tf.split(rois, 4, axis=1)
-        # bboxes = tf.concat([
-        #     roi_channels[1] / tf.to_float(h - 1),
-        #     roi_channels[0] / tf.to_float(w - 1),
-        #     roi_channels[3] / tf.to_float(h - 1),
-        #     roi_channels[2] / tf.to_float(w - 1),
-        # ], axis=1)
         bboxes = tf.concat([
-            roi_channels[0] / tf.to_float(h),
-            roi_channels[1] / tf.to_float(w),
-            roi_channels[2] / tf.to_float(h),
-            roi_channels[3] / tf.to_float(w),
+            roi_channels[0] / tf.to_float(h - 1),
+            roi_channels[1] / tf.to_float(w - 1),
+            roi_channels[2] / tf.to_float(h - 1),
+            roi_channels[3] / tf.to_float(w - 1),
         ], axis=1)
         pre_pool_size = self._pool_size * 2
         crops = tf.image.crop_and_resize(shared_layers, bboxes, tf.to_int32(batch_ids), [pre_pool_size, pre_pool_size],

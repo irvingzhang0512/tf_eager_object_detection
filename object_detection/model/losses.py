@@ -28,7 +28,7 @@ def smooth_l1_loss(bbox_txtytwth_pred, bbox_txtytwth_gt, outside_weights=1, sigm
     sigma_2 = sigma ** 2
     box_diff = tf.to_float(bbox_txtytwth_pred) - tf.to_float(bbox_txtytwth_gt)
     abs_in_box_diff = tf.abs(box_diff)
-    loss = tf.where(abs_in_box_diff < 1. / sigma_2,
+    loss = tf.where(tf.stop_gradient(abs_in_box_diff < 1. / sigma_2),
                     tf.pow(box_diff, 2) * (sigma_2 / 2.),
                     (abs_in_box_diff - 0.5 / sigma_2)
                     )

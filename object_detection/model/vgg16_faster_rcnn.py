@@ -5,7 +5,7 @@ from object_detection.model.rpn import RegionProposal, AnchorTarget, RPNHead
 from object_detection.model.roi import ProposalTarget, RoiPooling, RoiHead
 from object_detection.model.losses import get_rpn_loss, get_roi_loss
 from object_detection.utils.anchors import generate_by_anchor_base_tf, generate_anchor_base, generate_anchors_tf
-from object_detection.model.post_ops import predict_after_roi, post_ops_prediction
+from object_detection.model.post_ops import post_ops_prediction
 
 __all__ = ['Vgg16FasterRcnn']
 
@@ -119,11 +119,9 @@ class Vgg16FasterRcnn(tf.keras.Model):
         shared_features_shape = shared_features.get_shape().as_list()[1:3]
         tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
 
-        # anchors = self._anchor_generator(shape=shared_features_shape,
-        #                                  ratios=self._ratios, scales=self._scales) * self._extractor_stride
         anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
-                                             tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                             tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
+                                             tf.to_int32(image_shape[0] / self._extractor_stride),
+                                             tf.to_int32(image_shape[1] / self._extractor_stride)
                                              )
 
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
@@ -141,7 +139,6 @@ class Vgg16FasterRcnn(tf.keras.Model):
                                                                                                  image_shape),
                                                                                                 False)
             # [num_anchors, 2 * num_anchors]
-            # rpn_score = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self._num_anchors]), (0, 2, 1)), [-1, 2])
             rpn_score = tf.reshape(rpn_score, [-1, 2])
             rpn_cls_loss, rpn_reg_loss = get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
                                                       rpn_gt_labels, rpn_gt_txtytwth,
@@ -181,11 +178,9 @@ class Vgg16FasterRcnn(tf.keras.Model):
         shared_features_shape = shared_features.get_shape().as_list()[1:3]
         tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
 
-        # anchors = self._anchor_generator(shape=shared_features_shape,
-        #                                  ratios=self._ratios, scales=self._scales) * self._extractor_stride
         anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
-                                             tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                             tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
+                                             tf.to_int32(image_shape[0] / self._extractor_stride),
+                                             tf.to_int32(image_shape[1] / self._extractor_stride)
                                              )
         tf.logging.debug('generate {} anchors'.format(anchors.shape[0]))
 
@@ -204,11 +199,9 @@ class Vgg16FasterRcnn(tf.keras.Model):
         shared_features_shape = shared_features.get_shape().as_list()[1:3]
         tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
 
-        # anchors = self._anchor_generator(shape=shared_features_shape,
-        #                                  ratios=self._ratios, scales=self._scales) * self._extractor_stride
         anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
-                                             tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                             tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
+                                             tf.to_int32(image_shape[0] / self._extractor_stride),
+                                             tf.to_int32(image_shape[1] / self._extractor_stride)
                                              )
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
 
@@ -218,62 +211,6 @@ class Vgg16FasterRcnn(tf.keras.Model):
         roi_training_idx, roi_gt_labels, _, roi_pos_num = self._proposal_target((rois, gt_bboxes,
                                                                                  gt_labels, image_shape), True)
         return tf.gather(rois, roi_training_idx[:roi_pos_num]), roi_gt_labels[:roi_pos_num]
-
-    def _load_tf_faster_rcnn_tf_weights(self, ckpt_file_path):
-        reader = tf.train.load_checkpoint(ckpt_file_path)
-        extractor = self.get_layer('vgg16')
-        extractor_dict = {
-            "vgg_16/conv1/conv1_1/": "block1_conv1",
-            "vgg_16/conv1/conv1_2/": "block1_conv2",
-
-            "vgg_16/conv2/conv2_1/": "block2_conv1",
-            "vgg_16/conv2/conv2_2/": "block2_conv2",
-
-            "vgg_16/conv3/conv3_1/": "block3_conv1",
-            "vgg_16/conv3/conv3_2/": "block3_conv2",
-            "vgg_16/conv3/conv3_3/": "block3_conv3",
-
-            "vgg_16/conv4/conv4_1/": "block4_conv1",
-            "vgg_16/conv4/conv4_2/": "block4_conv2",
-            "vgg_16/conv4/conv4_3/": "block4_conv3",
-
-            "vgg_16/conv5/conv5_1/": "block5_conv1",
-            "vgg_16/conv5/conv5_2/": "block5_conv2",
-            "vgg_16/conv5/conv5_3/": "block5_conv3",
-        }
-        for slim_tensor_name_pre in extractor_dict.keys():
-            extractor.get_layer(name=extractor_dict[slim_tensor_name_pre]).set_weights([
-                reader.get_tensor(slim_tensor_name_pre + 'weights'),
-                reader.get_tensor(slim_tensor_name_pre + 'biases'),
-            ])
-            tf.logging.debug('successfully loaded weights for {}'.format(extractor_dict[slim_tensor_name_pre]))
-
-        rpn_head = self.get_layer('rpn_head')
-        rpn_head_dict = {
-            'vgg_16/rpn_conv/3x3/': 'rpn_first_conv',
-            'vgg_16/rpn_cls_score/': 'rpn_score_conv',
-            'vgg_16/rpn_bbox_pred/': 'rpn_bbox_conv',
-        }
-        for slim_tensor_name_pre in rpn_head_dict.keys():
-            rpn_head.get_layer(rpn_head_dict[slim_tensor_name_pre]).set_weights([
-                reader.get_tensor(slim_tensor_name_pre + 'weights'),
-                reader.get_tensor(slim_tensor_name_pre + 'biases')
-            ])
-            tf.logging.debug('successfully loaded weights for {}'.format(rpn_head_dict[slim_tensor_name_pre]))
-
-        roi_head = self.get_layer('roi_head')
-        roi_head_dict = {
-            'vgg_16/fc6/': 'fc1',
-            'vgg_16/fc7/': 'fc2',
-            'vgg_16/bbox_pred/': 'roi_head_bboxes',
-            'vgg_16/cls_score/': 'roi_head_score'
-        }
-        for slim_tensor_name_pre in roi_head_dict.keys():
-            roi_head.get_layer(roi_head_dict[slim_tensor_name_pre]).set_weights([
-                reader.get_tensor(slim_tensor_name_pre + 'weights'),
-                reader.get_tensor(slim_tensor_name_pre + 'biases')
-            ])
-            tf.logging.debug('successfully loaded weights for {}'.format(roi_head_dict[slim_tensor_name_pre]))
 
     def _load_simple_faster_rcnn_pytorch_weights(self, pytorch_weights_dict):
         extractor = self.get_layer('vgg16')
@@ -328,67 +265,3 @@ class Vgg16FasterRcnn(tf.keras.Model):
                 pytorch_weights_dict[pytorch_name + 'weight'],
                 pytorch_weights_dict[pytorch_name + 'bias']
             ])
-
-    def test_one_image(self, img_path, min_size=600, max_size=1000, preprocessing_type='caffe'):
-        from object_detection.dataset.tf_dataset_utils import preprocessing_func
-        import numpy as np
-        img = tf.image.decode_jpeg(tf.io.read_file(img_path))
-        h, w = img.shape[:2]
-        img = tf.reshape(img, [1, h, w, 3])
-        preprocessed_image, _, _, _ = preprocessing_func(img, np.zeros([1, 4], np.float32), h, w, None, None,
-                                                         min_size=min_size, max_size=max_size,
-                                                         preprocessing_type=preprocessing_type)
-        bboxes, labels, scores = self(preprocessed_image, False)
-        return bboxes, labels, scores
-
-    def test_rois(self, rois, shared_features):
-        roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),
-                                         training=False)
-        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
-        return roi_features, roi_score, roi_bboxes_txtytwth
-
-    def test_shared_features(self, image):
-        return self._extractor(image)
-
-    def test_rpn_head(self, shared_features, image_shape):
-        anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
-                                             tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                             tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
-                                             )
-        rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=False)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
-                                  training=False)
-        return rpn_score, rpn_bbox_txtytwth, rois
-
-    def test_anchors(self, image_shape):
-        return generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
-                                          tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                          tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
-                                          )
-
-    def test_all_nets(self, image):
-
-        image_shape = image.get_shape().as_list()[1:3]
-        tf.logging.debug('image shape is {}'.format(image_shape))
-
-        shared_features = self._extractor(image, training=False)
-        shared_features_shape = shared_features.get_shape().as_list()[1:3]
-        tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
-
-        # anchors = self._anchor_generator(shape=shared_features_shape,
-        #                                  ratios=self._ratios, scales=self._scales) * self._extractor_stride
-        anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
-                                             tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                             tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
-                                             )
-
-        tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
-
-        rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=False)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
-                                  training=False)
-        roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),
-                                         training=False)
-        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
-
-        return shared_features, anchors, rpn_score, rpn_bbox_txtytwth, rois, roi_features, roi_score, roi_bboxes_txtytwth

@@ -27,7 +27,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                activation='relu',
                                padding='same',
                                name='block1_conv2', trainable=False))
-        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool', padding='same'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool'))
 
         # Block 2
         self.add(layers.Conv2D(128, (3, 3),
@@ -38,7 +38,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                activation='relu',
                                padding='same',
                                name='block2_conv2', trainable=False))
-        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool', padding='same'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool'))
 
         # Block 3
         self.add(layers.Conv2D(256, (3, 3),
@@ -53,7 +53,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                activation='relu',
                                padding='same',
                                name='block3_conv3'))
-        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool', padding='same'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool'))
 
         # Block 4
         self.add(layers.Conv2D(512, (3, 3),
@@ -68,7 +68,7 @@ class Vgg16Extractor(tf.keras.Sequential):
                                activation='relu',
                                padding='same',
                                name='block4_conv3'))
-        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool', padding='same'))
+        self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool'))
 
         # Block 5
         self.add(layers.Conv2D(512, (3, 3),
@@ -268,7 +268,7 @@ class ResNet50Extractor(tf.keras.Model):
             RESNET_50_WEIGHTS_PATH_NO_TOP,
             cache_subdir='models',
             md5_hash='a268eb855778b3df3c7506639542a6af')
-        model.load_weights(weights_path)
+        model.load_weights(weights_path, by_name=True)
         self._model = model
 
     def call(self, inputs, training=None, mask=None):

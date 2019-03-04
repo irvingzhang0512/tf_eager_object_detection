@@ -70,17 +70,19 @@ def _parse_arguments(argv):
     parser.add_argument('--writer_file_patther', type=str, default='pascal_%s_%02d.tfrecords')
     parser.add_argument('--writers_number', type=int, default=1)
 
-    # parser.add_argument('--writer_base_path', type=str, default="/home/tensorflow05/data/VOCdevkit/tf_eager_records")
-    # parser.add_argument('--label_map_path', type=str, default='/home/tensorflow05/zyy/tf_eager_object_detection/'
-    #                                                           'object_detection/dataset/label_map_src/'
-    #                                                           'pascal_label_map.pbtxt')
-    # parser.add_argument('--data_root_path', type=str, default='/home/tensorflow05/data/VOCdevkit/VOC2012')
+    parser.add_argument('--writer_base_path', type=str,
+                        default="/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records")
+    parser.add_argument('--label_map_path', type=str,
+                        default='/ssd/zhangyiyang/tf_eager_object_detection/'
+                                'object_detection/dataset/label_map_src/pascal_label_map.pbtxt')
+    parser.add_argument('--data_root_path', type=str,
+                        default='/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/VOC2007')
 
-    parser.add_argument('--writer_base_path', type=str, default="D:\\data\\VOCdevkit\\tf_eager_records")
-    parser.add_argument('--label_map_path', type=str, default='E:\\PycharmProjects\\tf_eager_object_detection\\'
-                                                              'object_detection\\dataset\\label_map_src\\'
-                                                              'pascal_label_map.pbtxt')
-    parser.add_argument('--data_root_path', type=str, default='D:\\data\\VOCdevkit\\VOC2007')
+    # parser.add_argument('--writer_base_path', type=str, default="D:\\data\\VOCdevkit\\tf_eager_records")
+    # parser.add_argument('--label_map_path', type=str, default='E:\\PycharmProjects\\tf_eager_object_detection\\'
+    #                                                           'object_detection\\dataset\\label_map_src\\'
+    #                                                           'pascal_label_map.pbtxt')
+    # parser.add_argument('--data_root_path', type=str, default='D:\\data\\VOCdevkit\\VOC2007')
 
     return parser.parse_args(argv)
 
