@@ -14,6 +14,7 @@ def get_default_pascal_faster_rcnn_config():
         'max_objects_per_image': 50,
         'predictions_nms_iou_threshold': 0.3,
         'prediction_score_threshold': 0.0,
+        'show_image_score_threshold': 0.3,  # 用于图像展示
 
         # anchors configs
         'ratios': [0.5, 1.0, 2.0],
@@ -69,10 +70,11 @@ def get_default_coco_faster_rcnn_config():
 
         # predict & evaluate configs
         'evaluate_iou_threshold': 0.5,  # 计算map时使用，pred与gt的iou大于该阈值，则当前pred为TP，否则为FP
-        'max_objects_per_class_per_image': 5,
-        'max_objects_per_image': 15,
+        'max_objects_per_class_per_image': 50,
+        'max_objects_per_image': 50,
         'predictions_nms_iou_threshold': 0.3,
         'prediction_score_threshold': 0.0,
+        'show_image_score_threshold': 0.3,
 
         # anchors configs
         'ratios': [0.5, 1.0, 2.0],
@@ -81,7 +83,7 @@ def get_default_coco_faster_rcnn_config():
         # training configs
         'learning_rate_start': 1e-3,
         'optimizer_momentum': 0.9,
-        'learning_rate_decay_steps': 9 * 5000,
+        'learning_rate_decay_steps': 9 * 50000,
         'learning_rate_decay_rate': 0.1,
         'weight_decay': 0.0001,
         'epochs': 14,
