@@ -5,7 +5,7 @@ from object_detection.model.rpn import RegionProposal, AnchorTarget, RPNHead
 from object_detection.model.roi import ProposalTarget, RoiPooling, RoiHead
 from object_detection.model.losses import get_rpn_loss, get_roi_loss
 from object_detection.utils.anchors import generate_by_anchor_base_tf, generate_anchor_base, generate_anchors_tf
-from object_detection.model.post_ops import post_ops_prediction
+from object_detection.model.post_ops import predict_after_roi, post_ops_prediction
 
 __all__ = ['Vgg16FasterRcnn']
 

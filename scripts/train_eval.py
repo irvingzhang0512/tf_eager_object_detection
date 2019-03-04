@@ -19,7 +19,9 @@ from tensorflow.python.platform import tf_logging
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-tf.enable_eager_execution()
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+tf.enable_eager_execution(config=config)
 
 DATASET_TYPE = 'pascal'
 if DATASET_TYPE == 'pascal':

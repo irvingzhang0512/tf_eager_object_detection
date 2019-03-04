@@ -206,11 +206,6 @@ class RegionProposal(tf.keras.Model):
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, _ = bboxes_clip_filter(decoded_bboxes, 0, image_shape[0], image_shape[1])
 
-        # scores = tf.reshape(tf.transpose(tf.reshape(scores, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
-        # scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
-        # scores = tf.reshape(scores, [-1, 2*self._num_anchors])
-        # scores = tf.reshape(scores[..., self._num_anchors:], [-1])
-
         scores = tf.nn.softmax(tf.reshape(scores, [-1, 2]))[:, 1]
 
         # 3. 根据rpn_score获取num_pre_nms个anchors。
