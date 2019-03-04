@@ -13,7 +13,13 @@ from object_detection.model.vgg16_faster_rcnn import Vgg16FasterRcnn
 from object_detection.config.faster_rcnn_config import PASCAL_CONFIG as CONFIG
 from tensorflow.contrib.eager.python import saver as eager_saver
 
-tf.enable_eager_execution()
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+config = tf.ConfigProto(allow_soft_placement=True)
+config.gpu_options.allow_growth = True
+tf.enable_eager_execution(config=config)
 tf.logging.set_verbosity(tf.logging.INFO)
 
 num_classes = 21,
@@ -156,7 +162,6 @@ def _load_from_ckpt_file(model, ckpt_file_path):
     saver = eager_saver.Saver(model.variables)
     if tf.train.latest_checkpoint(ckpt_file_path) is not None:
         saver.restore(tf.train.latest_checkpoint(ckpt_file_path))
-        tf.logging.info('restore from {}...'.format(tf.train.latest_checkpoint(ckpt_file_path)))
     else:
         raise ValueError('unknown ckpt file {}'.format(ckpt_file_path))
 
@@ -171,19 +176,19 @@ def parse_args():
     parser.add_argument('--use_local_result_files', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
                         default='cv2', type=str)
-    parser.add_argument('--root_path', help='path to pascal voc 2007',
-                        default='D:\\data\\VOCdevkit\\VOC2007', type=str)
-    parser.add_argument('--result_file_format', help='local detection result file pattern',
-                        default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
-    parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-                        default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
+#     parser.add_argument('--root_path', help='path to pascal voc 2007',
+#                         default='D:\\data\\VOCdevkit\\VOC2007', type=str)
+#     parser.add_argument('--result_file_format', help='local detection result file pattern',
+#                         default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
+#     parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
+#                         default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
 
-    # parser.add_argument('--root_path', help='path to pascal voc 2007',
-    #                     default='/home/tensorflow05/data/VOCdevkit/VOC2007', type=str)
-    # parser.add_argument('--result_file_format', help='local detection result file pattern',
-    #                     default='/home/tensorflow05/zyy/tf_eager_object_detection/results/{:s}.txt', type=str)
-    # parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-    #                     default='/home/tensorflow05/zyy/tf_eager_object_detection/results', type=str)
+    parser.add_argument('--root_path', help='path to pascal voc 2007',
+                        default='/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/VOC2007', type=str)
+    parser.add_argument('--result_file_format', help='local detection result file pattern',
+                        default='/ssd/zhangyiyang/tf_eager_object_detection/results/{:s}.txt', type=str)
+    parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
+                        default='/ssd/zhangyiyang/tf_eager_object_detection/results', type=str)
 
     if len(sys.argv) == 1:
         parser.print_help()

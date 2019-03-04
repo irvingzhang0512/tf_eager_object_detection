@@ -12,6 +12,8 @@ __all__ = ['Vgg16FasterRcnn']
 
 class Vgg16FasterRcnn(tf.keras.Model):
     def __init__(self,
+                 slim_ckpt_file_path=None,
+
                  num_classes=21,
                  weight_decay=0.0001,
 
@@ -70,7 +72,8 @@ class Vgg16FasterRcnn(tf.keras.Model):
         self._prediction_nms_iou_threshold = prediction_nms_iou_threshold
         self._prediction_score_threshold = prediction_score_threshold
 
-        self._extractor = Vgg16Extractor()
+        self._extractor = Vgg16Extractor(weight_decay=weight_decay,
+                                         slim_ckpt_file_path=slim_ckpt_file_path)
 
         self._rpn_head = RPNHead(self._num_anchors, weight_decay=weight_decay)
         self._anchor_generator = generate_by_anchor_base_tf
@@ -97,7 +100,8 @@ class Vgg16FasterRcnn(tf.keras.Model):
         self._roi_head = RoiHead(num_classes,
                                  roi_feature_size=roi_feature_size,
                                  keep_rate=roi_head_keep_dropout_rate,
-                                 weight_decay=weight_decay)
+                                 weight_decay=weight_decay,
+                                 slim_ckpt_file_path=slim_ckpt_file_path)
         self._proposal_target = ProposalTarget(
             pos_iou_threshold=roi_training_pos_iou_threshold,
             neg_iou_threshold=roi_training_neg_iou_threshold,
@@ -271,7 +275,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
                 reader.get_tensor(slim_tensor_name_pre + 'weights'),
                 reader.get_tensor(slim_tensor_name_pre + 'biases'),
             ])
-            tf.logging.debug('successfully loaded weights for {}'.format(extractor_dict[slim_tensor_name_pre]))
+            tf.logging.info('successfully loaded weights for {}'.format(extractor_dict[slim_tensor_name_pre]))
 
         rpn_head = self.get_layer('rpn_head')
         rpn_head_dict = {
@@ -284,7 +288,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
                 reader.get_tensor(slim_tensor_name_pre + 'weights'),
                 reader.get_tensor(slim_tensor_name_pre + 'biases')
             ])
-            tf.logging.debug('successfully loaded weights for {}'.format(rpn_head_dict[slim_tensor_name_pre]))
+            tf.logging.info('successfully loaded weights for {}'.format(rpn_head_dict[slim_tensor_name_pre]))
 
         roi_head = self.get_layer('roi_head')
         roi_head_dict = {
@@ -298,7 +302,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
                 reader.get_tensor(slim_tensor_name_pre + 'weights'),
                 reader.get_tensor(slim_tensor_name_pre + 'biases')
             ])
-            tf.logging.debug('successfully loaded weights for {}'.format(roi_head_dict[slim_tensor_name_pre]))
+            tf.logging.info('successfully loaded weights for {}'.format(roi_head_dict[slim_tensor_name_pre]))
 
     def test_one_image(self, img_path, min_size=600, max_size=1000, preprocessing_type='caffe'):
         from object_detection.dataset.tf_dataset_utils import preprocessing_func

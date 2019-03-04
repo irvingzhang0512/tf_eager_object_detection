@@ -17,7 +17,7 @@ from tqdm import tqdm
 from tensorflow.python.platform import tf_logging
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 config = tf.ConfigProto(allow_soft_placement=True)
 config.gpu_options.allow_growth = True
@@ -113,7 +113,7 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal', dat
         dataset = pascal_get_dataset(file_names,
                                      min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
                                      preprocessing_type=preprocessing_type,
-                                     argument=False, )
+                                     argument=True, shuffle=True)
     elif dataset_type == 'coco':
         dataset = coco_get_dataset(root_dir=data_root_path, mode='train',
                                    min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
@@ -169,6 +169,7 @@ def train_one_epoch(dataset, base_model, optimizer,
             rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = base_model((image, gt_bboxes, gt_labels), True)
             l2_loss = tf.add_n(base_model.losses)
             total_loss = rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss + l2_loss
+            # total_loss = roi_reg_loss + roi_cls_loss
 
             train_step(base_model, total_loss, tape, optimizer)
 
@@ -237,10 +238,17 @@ def train(training_dataset, base_model, optimizer,
           ):
     saver = eager_saver.Saver(base_model.variables)
 
+#     import numpy as np
+#     base_model((tf.to_float(np.random.rand(1, 800, 600, 3)),
+#                tf.to_int32(np.zeros([1, 4])),
+#                tf.to_int32(np.array([1]))
+#                ), True)
+#     base_model.load_tf_faster_rcnn_tf_weights(
+#         '/ssd/zhangyiyang/tf_eager_object_detection/voc_2007_trainval/vgg16_faster_rcnn_iter_70000.ckpt')
+
     # load saved ckpt files
     if tf.train.latest_checkpoint(ckpt_dir) is not None:
         saver.restore(tf.train.latest_checkpoint(ckpt_dir))
-        tf_logging.info('restore from {}...'.format(tf.train.latest_checkpoint(ckpt_dir)))
 
     tf.train.get_or_create_global_step()
     train_writer = tf.contrib.summary.create_file_writer(train_dir, flush_millis=100000)
@@ -274,7 +282,7 @@ def parse_args():
     parser.add_argument('--data_root_path', type=str,
                         default="/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records")
     parser.add_argument('--logs_dir', type=str,
-                        default="/ssd/zhangyiyang/test/tf_eager_object_detection/logs/logs-coco")
+                        default="/ssd/zhangyiyang/test/tf_eager_object_detection/logs/logs-pascal-slim-rpn-only")
 
     # parser.add_argument('--data_root_path', default="D:\\data\\COCO2017", type=str)
     # parser.add_argument('--data_root_path', default="D:\\data\\VOCdevkit\\tf_eager_records\\", type=str)

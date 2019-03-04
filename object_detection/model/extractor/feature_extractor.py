@@ -14,18 +14,20 @@ RESNET_50_WEIGHTS_PATH_NO_TOP = ('https://github.com/fchollet/deep-learning-mode
 
 
 class Vgg16Extractor(tf.keras.Sequential):
-    def __init__(self, ckpt_file_path=None):
+    def __init__(self, weight_decay=0.0001,
+                 slim_ckpt_file_path=None):
         super().__init__(name='vgg16')
-        self._ckpt_file_path = ckpt_file_path
         # Block 1
         self.add(layers.Conv2D(64, (3, 3),
                                activation='relu',
                                padding='same',
                                name='block1_conv1', trainable=False,
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                input_shape=(None, None, 3)))
         self.add(layers.Conv2D(64, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block1_conv2', trainable=False))
         self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool', padding='same'))
 
@@ -33,10 +35,12 @@ class Vgg16Extractor(tf.keras.Sequential):
         self.add(layers.Conv2D(128, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block2_conv1', trainable=False))
         self.add(layers.Conv2D(128, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block2_conv2', trainable=False))
         self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool', padding='same'))
 
@@ -44,14 +48,17 @@ class Vgg16Extractor(tf.keras.Sequential):
         self.add(layers.Conv2D(256, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block3_conv1'))
         self.add(layers.Conv2D(256, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block3_conv2'))
         self.add(layers.Conv2D(256, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block3_conv3'))
         self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool', padding='same'))
 
@@ -59,14 +66,17 @@ class Vgg16Extractor(tf.keras.Sequential):
         self.add(layers.Conv2D(512, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block4_conv1'))
         self.add(layers.Conv2D(512, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block4_conv2'))
         self.add(layers.Conv2D(512, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block4_conv3'))
         self.add(layers.MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool', padding='same'))
 
@@ -74,17 +84,20 @@ class Vgg16Extractor(tf.keras.Sequential):
         self.add(layers.Conv2D(512, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block5_conv1'))
         self.add(layers.Conv2D(512, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block5_conv2'))
         self.add(layers.Conv2D(512, (3, 3),
                                activation='relu',
                                padding='same',
+                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                name='block5_conv3'))
-        if ckpt_file_path:
-            self.load_slim_weights(ckpt_file_path)
+        if slim_ckpt_file_path:
+            self.load_slim_weights(slim_ckpt_file_path)
         else:
             self._load_keras_weights()
 
@@ -95,10 +108,10 @@ class Vgg16Extractor(tf.keras.Sequential):
             cache_subdir='models',
             file_hash='64373286793e3c8b2b4e3219cbf3544b')
         self.load_weights(weights_path, by_name=True)
-        tf.logging.info('successfully loaded keras vgg weights.')
+        tf.logging.info('successfully loaded keras vgg weights for vgg16 extractor.')
 
-    def load_slim_weights(self, ckpt_file_path):
-        reader = tf.train.NewCheckpointReader(ckpt_file_path)
+    def load_slim_weights(self, slim_ckpt_file_path):
+        reader = tf.train.NewCheckpointReader(slim_ckpt_file_path)
         slim_to_keras = {
             "vgg_16/conv1/conv1_1/": "block1_conv1",
             "vgg_16/conv1/conv1_2/": "block1_conv2",
@@ -119,8 +132,15 @@ class Vgg16Extractor(tf.keras.Sequential):
             "vgg_16/conv5/conv5_3/": "block5_conv3",
         }
         for slim_tensor_name_pre in slim_to_keras.keys():
-            self.get_layer(name=slim_to_keras[slim_tensor_name_pre]).set_weights([
-                reader.get_tensor(slim_tensor_name_pre+'weights'),
-                reader.get_tensor(slim_tensor_name_pre+'biases'),
-            ])
-        tf.logging.info('successfully loaded slim vgg weights.')
+            if slim_tensor_name_pre == 'vgg_16/conv1/conv1_1/':
+                weights = reader.get_tensor(slim_tensor_name_pre+'weights')[:, :, ::-1, :]
+                self.get_layer(name=slim_to_keras[slim_tensor_name_pre]).set_weights([
+                    weights,
+                    reader.get_tensor(slim_tensor_name_pre+'biases'),
+                ])
+            else:
+                self.get_layer(name=slim_to_keras[slim_tensor_name_pre]).set_weights([
+                    reader.get_tensor(slim_tensor_name_pre+'weights'),
+                    reader.get_tensor(slim_tensor_name_pre+'biases'),
+                ])
+        tf.logging.info('successfully loaded slim vgg weights for vgg16 extractor.')

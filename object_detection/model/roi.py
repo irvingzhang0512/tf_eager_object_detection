@@ -51,7 +51,8 @@ class RoiPooling(tf.keras.Model):
 class RoiHead(tf.keras.Model):
     def __init__(self, num_classes,
                  roi_feature_size=7 * 7 * 512,
-                 keep_rate=0.5, weight_decay=0.0005):
+                 keep_rate=0.5, weight_decay=0.0005,
+                 slim_ckpt_file_path=None,):
         super().__init__()
         self._num_classes = num_classes
 
@@ -76,6 +77,28 @@ class RoiHead(tf.keras.Model):
                                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
 
         self.build((None, roi_feature_size))
+
+        if slim_ckpt_file_path is None:
+            self._load_keras_weights()
+        else:
+            self._load_slim_weights(slim_ckpt_file_path)
+
+    def _load_slim_weights(self, ckpt_file_path):
+        reader = tf.train.NewCheckpointReader(ckpt_file_path)
+        slim_to_keras = {
+            "vgg_16/fc6/": "fc1",
+            "vgg_16/fc7/": "fc2",
+        }
+
+        for slim_tensor_name_pre in slim_to_keras.keys():
+            cur_layer = self.get_layer(name=slim_to_keras[slim_tensor_name_pre])
+            cur_layer.set_weights([
+                reader.get_tensor(slim_tensor_name_pre+'weights').reshape(cur_layer.variables[0].get_shape().as_list()),
+                reader.get_tensor(slim_tensor_name_pre+'biases').reshape(cur_layer.variables[1].get_shape().as_list()),
+            ])
+        tf.logging.info('successfully loaded slim vgg weights.')
+
+    def _load_keras_weights(self):
         weights_path = tf.keras.utils.get_file(
             'vgg16_weights_tf_dim_ordering_tf_kernels.h5',
             VGG_16_WEIGHTS_PATH,
@@ -168,8 +191,8 @@ class ProposalTarget(tf.keras.Model):
         final_rois = tf.gather(rois, keep_inds)  # rois[keep_inds]
         final_labels = tf.gather(labels, keep_inds)  # labels[keep_inds]
         # labels[fg_inds_size:] = 0
-        final_labels = tf.scatter_update(tf.Variable(final_labels), tf.range(tf.size(fg_inds), tf.size(keep_inds),
-                                                                             dtype=tf.int32), 0)
+        final_labels = tf.scatter_update(tf.Variable(final_labels),
+                                         tf.range(tf.size(fg_inds), tf.size(keep_inds), dtype=tf.int32), 0)
 
         # inside weights 只有正例才会设置，其他均为0
         bbox_inside_weights = tf.zeros((tf.size(keep_inds), self._num_classes, 4), dtype=tf.float32)
