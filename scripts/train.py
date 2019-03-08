@@ -23,6 +23,7 @@ tf.enable_eager_execution(config=config)
 tf_logging.set_verbosity(tf_logging.INFO)
 
 CONFIG = None
+EXCLUDE = None
 
 
 def apply_gradients(model, optimizer, gradients):
@@ -39,6 +40,18 @@ def apply_gradients(model, optimizer, gradients):
             all_grads.append(grad * scale)
             all_vars.append(var)
         gradients = all_grads
+
+    if EXCLUDE is not None:
+        filter_vars = []
+        filter_grads = []
+        for var, grad in zip(all_vars, gradients):
+            if EXCLUDE in var.name:
+                continue
+            filter_vars.append(var)
+            filter_grads.append(grad)
+        gradients = filter_grads
+        all_vars = filter_vars
+
     optimizer.apply_gradients(zip(gradients, all_vars),
                               global_step=tf.train.get_or_create_global_step())
 
@@ -302,6 +315,7 @@ def parse_args():
     parser.add_argument('--restore_ckpt_path', type=str, default=None)
     parser.add_argument('--use_adam', type=bool, default=False)
     parser.add_argument('--loss_type', type=str, default='total', help='one of [total, rpn, roi]')
+    parser.add_argument('--exclude_str', type=str, default=None, help='remove var with exclude_str to train.')
 
     # parser.add_argument('--data_root_path', default="/ssd/zhangyiyang/COCO2017", type=str)
     parser.add_argument('--data_root_path', type=str,
@@ -334,6 +348,9 @@ def main(args):
 
     if args.loss_type not in ['total', 'roi', 'rpn']:
         raise ValueError('unknown loss type {}'.format(args.loss_type))
+
+    global EXCLUDE
+    EXCLUDE = args.exclude_str
 
     train(training_dataset=_get_training_dataset('caffe', args.data_type, args.data_root_path),
           base_model=_get_default_vgg16_model(slim_ckpt_file_path=args.slim_ckpt_file_path),
