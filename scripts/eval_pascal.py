@@ -13,9 +13,8 @@ from object_detection.model.vgg16_faster_rcnn import Vgg16FasterRcnn
 from object_detection.config.faster_rcnn_config import PASCAL_CONFIG as CONFIG
 from tensorflow.contrib.eager.python import saver as eager_saver
 
-
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 config = tf.ConfigProto(allow_soft_placement=True)
 config.gpu_options.allow_growth = True
@@ -96,9 +95,9 @@ def eval_by_local_files_and_gt_xmls(root_path,
                            ovthresh=prediction_iou_threshold,
                            use_07_metric=True,
                            )
-        print('class {} get ap {}'.format(cls_name, cur_res[2]))
+        tf.logging.info('class {} get ap {}'.format(cls_name, cur_res[2]))
         all_ap += cur_res[2]
-    print('map {}'.format(all_ap / (len(class_list) - 1)))
+    tf.logging.info('map {}'.format(all_ap / (len(class_list) - 1)))
 
 
 def _get_default_vgg16_model():
@@ -148,18 +147,18 @@ def _get_default_vgg16_model():
 def _get_tf_faster_rcnn_pre_trained_model(model,
                                           ckpt_file_path='/home/tensorflow05/data/voc_2007_trainval/'
                                                          'vgg16_faster_rcnn_iter_70000.ckpt'):
-    model(
-        (
-            tf.constant(np.random.rand(1, 600, 800, 3), dtype=tf.float32),
-            tf.to_int32(np.random.rand(2, 4)),
-            tf.to_int32(np.array([1, 10]))
-        ), True)
+    model(tf.to_float(np.random.rand(1, 800, 600, 3)), False)
     model.load_tf_faster_rcnn_tf_weights(ckpt_file_path)
     return model
 
 
 def _load_from_ckpt_file(model, ckpt_file_path):
+    # 重大BUG，如果没有这一步操作，下一步的 model.variables 中就不包括 rpn_head 的内容
+    model(tf.to_float(np.random.rand(1, 800, 600, 3)), False)
+
     saver = eager_saver.Saver(model.variables)
+    for var in model.variables:
+        tf.logging.info('restore var {}'.format(var.name))
     if tf.train.latest_checkpoint(ckpt_file_path) is not None:
         saver.restore(tf.train.latest_checkpoint(ckpt_file_path))
     else:
@@ -176,12 +175,12 @@ def parse_args():
     parser.add_argument('--use_local_result_files', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
                         default='cv2', type=str)
-#     parser.add_argument('--root_path', help='path to pascal voc 2007',
-#                         default='D:\\data\\VOCdevkit\\VOC2007', type=str)
-#     parser.add_argument('--result_file_format', help='local detection result file pattern',
-#                         default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
-#     parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-#                         default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
+    #     parser.add_argument('--root_path', help='path to pascal voc 2007',
+    #                         default='D:\\data\\VOCdevkit\\VOC2007', type=str)
+    #     parser.add_argument('--result_file_format', help='local detection result file pattern',
+    #                         default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
+    #     parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
+    #                         default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
 
     parser.add_argument('--root_path', help='path to pascal voc 2007',
                         default='/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/VOC2007', type=str)

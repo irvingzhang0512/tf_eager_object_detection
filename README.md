@@ -52,11 +52,27 @@
 + [x] use `logging` instead of `print`.
 + [x] COCO dataset & training.
 + [x] set bboxes range in `[0, height - 1]` & `[0, width - 1]`.
-+ [ ] add model load/save functions.
++ [x] add prediction_score_threshold for image summary.
++ [x] add model load/save functions.
 + [ ] predict and visual scripts.
-+ [ ] add prediction_score_threshold for image summary.
 
 
+## 3. 训练记录
 
+### 3.1. end to end training:
++ 整体导入 tf-faster-rcnn 模型(`logs-pascal-rpn-roi`)
+    + 直接预测，map结果为0.71。
+    + 训练1个epoch后map为0.71016，SGD + lr 1e-4。
+    + 训练14个epoch后map为0.7051，SGD + lr 1e-4 -> 1e-5。
++ extractor & rpn head 使用 tf-faster-rcnn　的模型，只训练 roi head(`logs-pascal-roi`)
++ 使用 slim pretrained model 训练整体模型（`logs-pascal-slim`）：
+    + SGD，1e-3 -> 1e-4：1个epoch后map为0.42，14个epoch后map为（Terminal 2）：
 
-
+### 3.2. alt training
++ 使用 slim pretrained model，只训练 extractor & rpn head（14个epoch，无l2 loss，`logs-pascal-slim-rpn`），之后：
+    + 训练 roi head（14个epoch，`logs-pascal-slim-roi-after-rpn`，l2 loss，sgd, 1e-3 -> 1e-4，Terminal 1）：
+    + 训练 roi head（14个epoch，无l2 loss，adam, 1e-4 -> 1e-5）：
++ 使用 slim pretrained model，只训练 extractor & rpn head（14个epoch，有l2 loss，`logs-pascal-slim-rpn-l2`），之后：
+    + 训练 roi head（14个epoch，`logs-pascal-slim-roi-after-rpn-l2`，sgd, 1e-3 -> 1e-4）：
+    + 训练 roi head（14个epoch，l2 loss，adam, 1e-4 -> 1e-5）：
+    

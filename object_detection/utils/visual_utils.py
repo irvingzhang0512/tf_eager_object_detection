@@ -39,7 +39,7 @@ def draw_bboxes_with_labels(image, bboxes, label_texts):
     return image
 
 
-def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', figsize=(15, 10)):
+def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', figsize=(15, 10), enable_matplotlib=True):
     """
     显示图片
     :param image:
@@ -47,6 +47,7 @@ def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', fig
     :param labels_text:
     :param preprocess_type:
     :param figsize:
+    :param enable_matplotlib:
     :return:
     """
     if isinstance(image, tf.Tensor):
@@ -71,8 +72,9 @@ def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', fig
     else:
         raise ValueError('unknown preprocess_type {}'.format(preprocess_type))
     image_with_bboxes = draw_bboxes_with_labels(image, bboxes, labels_text)
-    plt.figure(figsize=figsize)
-    plt.imshow(image_with_bboxes)
-    plt.show()
+    if enable_matplotlib:
+        plt.figure(figsize=figsize)
+        plt.imshow(image_with_bboxes)
+        plt.show()
 
     return image_with_bboxes

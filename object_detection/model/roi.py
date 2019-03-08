@@ -1,6 +1,5 @@
 import tensorflow as tf
 from object_detection.utils.bbox_tf import pairwise_iou
-from tensorflow.python.platform import tf_logging
 from object_detection.utils.bbox_transform import encode_bbox_with_mean_and_std
 
 layers = tf.keras.layers
@@ -43,9 +42,14 @@ class RoiPooling(tf.keras.Model):
             roi_channels[2] / tf.to_float(w - 1),
         ], axis=1)
         pre_pool_size = self._pool_size * 2
-        crops = tf.image.crop_and_resize(shared_layers, bboxes, tf.to_int32(batch_ids), [pre_pool_size, pre_pool_size],
+
+        # 重大bug…… shared_layers 还是需要参与反向传播的……，bboxes不参加
+        crops = tf.image.crop_and_resize(shared_layers,
+                                         tf.stop_gradient(bboxes),
+                                         box_ind=tf.to_int32(batch_ids),
+                                         crop_size=[pre_pool_size, pre_pool_size],
                                          name="crops")
-        return tf.stop_gradient(self._flatten_layer(self._max_pool(crops)))
+        return self._flatten_layer(self._max_pool(crops))
 
 
 class RoiHead(tf.keras.Model):
@@ -96,7 +100,7 @@ class RoiHead(tf.keras.Model):
                 reader.get_tensor(slim_tensor_name_pre+'weights').reshape(cur_layer.variables[0].get_shape().as_list()),
                 reader.get_tensor(slim_tensor_name_pre+'biases').reshape(cur_layer.variables[1].get_shape().as_list()),
             ])
-        tf.logging.info('successfully loaded slim vgg weights.')
+        tf.logging.info('successfully loaded slim vgg weights for roi head.')
 
     def _load_keras_weights(self):
         weights_path = tf.keras.utils.get_file(
@@ -176,16 +180,17 @@ class ProposalTarget(tf.keras.Model):
         labels = tf.gather(gt_labels, gt_assignment)  # [rois_size, ]
 
         # 根据条件获取 前景 背景
-        fg_inds = tf.where(max_overlaps > self._pos_iou_threshold)[:, 0]
-        # bg_inds = tf.where(tf.logical_and(max_overlaps < self._pos_iou_threshold,
-        #                                   max_overlaps >= self._neg_iou_threshold))[:, 0]
-        bg_inds = tf.where(max_overlaps < self._pos_iou_threshold)[:, 0]
+        fg_inds = tf.where(max_overlaps >= self._pos_iou_threshold)[:, 0]
+        bg_inds = tf.where(tf.logical_and(max_overlaps < self._pos_iou_threshold,
+                                          max_overlaps >= self._neg_iou_threshold))[:, 0]
+        # bg_inds = tf.where(max_overlaps < self._pos_iou_threshold)[:, 0]
 
         # 筛选 前景/背景
         if tf.size(fg_inds) > self._max_pos_samples:
             fg_inds = tf.random_shuffle(fg_inds)[:self._max_pos_samples]
         if tf.size(bg_inds) > self._total_num_samples - tf.size(fg_inds):
             bg_inds = tf.random_shuffle(bg_inds)[:(self._total_num_samples - tf.size(fg_inds))]
+        tf.logging.debug('proposal target generate %d fgs and %d bgs.' % (tf.size(fg_inds), tf.size(bg_inds)))
 
         keep_inds = tf.concat([fg_inds, bg_inds], axis=0)
         final_rois = tf.gather(rois, keep_inds)  # rois[keep_inds]

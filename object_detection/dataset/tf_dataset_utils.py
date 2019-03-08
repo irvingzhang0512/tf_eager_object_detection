@@ -81,7 +81,7 @@ def _tf_preprocessing(image):
     return tf.image.convert_image_dtype(image, dtype=tf.float32) * 2.0 - 1.0
 
 
-def preprocessing_func(image, bboxes, height, width, labels, labels_text,
+def preprocessing_func(image, bboxes, height, width, labels,
                        min_size, max_size, preprocessing_type):
     """
     rescale image
@@ -96,7 +96,6 @@ def preprocessing_func(image, bboxes, height, width, labels, labels_text,
     :param image:
     :param bboxes:
     :param labels:
-    :param labels_text:
     :return:
     """
 
@@ -124,4 +123,4 @@ def preprocessing_func(image, bboxes, height, width, labels, labels_text,
     channels[3] = channels[3] * tf.to_float(n_width - 1)
     bboxes = tf.concat(channels, axis=-1)
 
-    return image, bboxes, labels, labels_text
+    return image, bboxes, labels

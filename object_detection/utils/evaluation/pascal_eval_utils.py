@@ -1,7 +1,8 @@
 import tensorflow as tf
 import numpy as np
 from tqdm import tqdm
-from object_detection.utils.evaluation.eval_pascal_tf_dataset import get_dataset_by_local_file, get_dataset_by_tf_records
+from object_detection.utils.evaluation.eval_pascal_tf_dataset import get_dataset_by_local_file, \
+    get_dataset_by_tf_records
 from object_detection.utils.bbox_transform import decode_bbox_with_mean_and_std
 from object_detection.utils.bbox_tf import bboxes_clip_filter
 
@@ -47,19 +48,20 @@ def get_prediction_files(cur_model,
         rois = rois / tf.to_float(img_scale)
         roi_txtytwth = tf.reshape(roi_txtytwth, [-1, num_classes, 4])
         for j in range(1, num_classes):
-            inds = np.where(scores[:, j] > score_threshold)[0]
+            inds = tf.where(scores[:, j] > score_threshold)[:, 0]
             cls_scores = tf.gather(scores[:, j], inds)
             cls_boxes = decode_bbox_with_mean_and_std(tf.gather(rois, inds),
                                                       tf.gather(roi_txtytwth[:, j, :], inds),
                                                       target_means=target_means, target_stds=target_stds)
             cls_boxes, inds = bboxes_clip_filter(cls_boxes, 0, raw_h, raw_w, min_edge)
-            cls_scores = tf.gather(cls_scores, inds).numpy()
-            cls_boxes = cls_boxes.numpy()
-
-            cls_dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
-                .astype(np.float32, copy=False)
+            cls_scores = tf.gather(cls_scores, inds)
             keep = tf.image.non_max_suppression(cls_boxes, cls_scores, max_objects_per_class,
                                                 iou_threshold=iou_threshold)
+
+            cls_scores = cls_scores.numpy()
+            cls_boxes = cls_boxes.numpy()
+            cls_dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
+                .astype(np.float32, copy=False)
             cls_dets = cls_dets[keep.numpy(), :]
             all_boxes[j][i] = cls_dets
 
@@ -76,7 +78,7 @@ def get_prediction_files(cur_model,
     for cls_ind, cls in enumerate(class_list):
         if cls == '__background__':
             continue
-        print('Writing {} VOC results file'.format(cls))
+        tf.logging.info('Writing {} VOC results file'.format(cls))
         filename = result_file_format.format(cls)
         with open(filename, 'wt') as f:
             for im_ind, index in enumerate(image_sets):
@@ -86,6 +88,4 @@ def get_prediction_files(cur_model,
                 # the VOCdevkit expects 1-based indices
                 for k in range(dets.shape[0]):
                     f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
-                            format(index, dets[k, -1],
-                                   dets[k, 0] + 1, dets[k, 1] + 1,
-                                   dets[k, 2] + 1, dets[k, 3] + 1))
+                            format(index, dets[k, -1], dets[k, 0] + 1, dets[k, 1] + 1, dets[k, 2] + 1, dets[k, 3] + 1))

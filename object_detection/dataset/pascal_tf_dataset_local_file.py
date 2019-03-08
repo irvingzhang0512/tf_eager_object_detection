@@ -41,23 +41,21 @@ def get_dataset(mode, root_path, label_map_file_path):
         xmax = []
         ymax = []
         classes = []
-        classes_text = []
         if 'object' in xml_dict:
             for obj in xml_dict['object']:
                 xmin.append((float(obj['bndbox']['xmin']) - 1) * img_scale)
                 ymin.append((float(obj['bndbox']['ymin']) - 1) * img_scale)
                 xmax.append((float(obj['bndbox']['xmax']) - 1) * img_scale)
                 ymax.append((float(obj['bndbox']['ymax']) - 1) * img_scale)
-                classes_text.append(obj['name'].encode('utf8'))
                 classes.append(label_map_dict[obj['name']])
 
         return img, np.stack([ymin, xmin, ymax, xmax], axis=0).transpose().astype(np.float32), np.array(classes).astype(
-            np.int32), np.array(classes_text)
+            np.int32)
 
     dataset = tf.data.Dataset.from_tensor_slices(examples_list).map(
         lambda example: tf.py_func(_map_from_xml_and_cv2,
                                    [example],
-                                   [tf.float32, tf.float32, tf.int32, tf.string])
+                                   [tf.float32, tf.float32, tf.int32])
     ).batch(1)
 
     return dataset

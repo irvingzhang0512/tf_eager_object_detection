@@ -26,14 +26,12 @@ def _parse_tf_records(serialized_example):
     features['image/object/bbox/ymin'] = tf.sparse_tensor_to_dense(features['image/object/bbox/ymin'])
     features['image/object/bbox/ymax'] = tf.sparse_tensor_to_dense(features['image/object/bbox/ymax'])
     features['image/object/class/label'] = tf.sparse_tensor_to_dense(features['image/object/class/label'])
-    features['image/object/class/text'] = tf.sparse_tensor_to_dense(features['image/object/class/text'], '')
     image = tf.image.decode_jpeg(features['image/encoded'][0])
     bboxes = tf.transpose(tf.stack((features['image/object/bbox/ymin'],
                                     features['image/object/bbox/xmin'],
                                     features['image/object/bbox/ymax'],
                                     features['image/object/bbox/xmax'])), name='bboxes')
-    return image, bboxes, features['image/height'][0], features['image/width'][0], \
-           features['image/object/class/label'], features['image/object/class/text']
+    return image, bboxes, features['image/height'][0], features['image/width'][0], features['image/object/class/label']
 
 
 def get_dataset(tf_records_list,
@@ -66,7 +64,7 @@ def get_dataset(tf_records_list,
     2) 随机切片
 
     当通过 itr 进行操作时，该 dataset 返回的数据包括：
-    image, bboxes, labels, labels_text
+    image, bboxes, labels
     数据类型分别是：tf.float32([0, 1]), tf.float32([0, 边长]), tf.int32([0, num_classes]), tf.string
     shape为：[1, height, width, 3], [1, num_bboxes, 4], [num_bboxes], [num_bboxes]
 
@@ -90,9 +88,9 @@ def get_dataset(tf_records_list,
     if argument:
         image_argument_partial = partial(image_argument_with_imgaug, iaa_sequence=iaa_sequence)
         dataset = dataset.map(
-            lambda image, bboxes, image_height, image_width, labels, labels_text: tuple([
+            lambda image, bboxes, image_height, image_width, labels: tuple([
                 *tf.py_func(image_argument_partial, [image, bboxes], [image.dtype, bboxes.dtype]),
-                image_height, image_width, labels, labels_text])
+                image_height, image_width, labels])
         )
 
     preprocessing_partial_func = partial(preprocessing_func,
@@ -107,30 +105,3 @@ def get_dataset(tf_records_list,
         dataset = dataset.prefetch(buffer_size=prefetch_buffer_size)
 
     return dataset.repeat(repeat)
-
-
-if __name__ == '__main__':
-    tfs = ['/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_00.tfrecords',
-           '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_01.tfrecords',
-           '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_02.tfrecords',
-           '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_03.tfrecords',
-           '/home/tensorflow05/data/VOCdevkit/tf_eager_records/pascal_train_04.tfrecords', ]
-    d = get_dataset(tfs)
-    tf.enable_eager_execution()
-    import matplotlib.pyplot as plt
-    from object_detection.utils.visual_utils import draw_bboxes_with_labels
-
-    for idx, (cur_image, cur_bboxes, cur_labels, cur_labels_text) in enumerate(d):
-        cur_means = [102.9801, 115.9465, 122.7717]
-        cur_image = tf.squeeze(cur_image, axis=0).numpy()
-        cur_image[..., 0] += cur_means[0]
-        cur_image[..., 1] += cur_means[1]
-        cur_image[..., 2] += cur_means[2]
-        cur_image = cur_image[..., ::-1]
-        cur_image = cur_image.astype(np.uint8)
-        image_with_bboxes = draw_bboxes_with_labels(cur_image / 255, tf.squeeze(cur_bboxes, axis=0),
-                                                    tf.squeeze(cur_labels_text, axis=0))
-        plt.imshow(image_with_bboxes)
-        plt.show()
-        if idx == 5:
-            break

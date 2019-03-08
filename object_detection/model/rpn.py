@@ -126,6 +126,7 @@ class AnchorTarget(tf.keras.Model):
         if tf.size(bg_inds) > num_bg:
             disable_inds = tf.random_shuffle(bg_inds)[num_bg:]
             labels = tf.scatter_update(tf.Variable(labels), disable_inds, -1)
+        tf.logging.debug('anchor target generate %d fgs and %d bgs.' % (tf.size(fg_inds), tf.size(bg_inds)))
 
         # 计算 bboxes targets，作为 rpn reg loss 的 ground truth
         bboxes_targets = encode_bbox_with_mean_and_std(anchors, tf.gather(gt_bboxes, argmax_overlaps),

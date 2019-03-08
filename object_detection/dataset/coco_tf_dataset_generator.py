@@ -117,7 +117,7 @@ class CocoDataset:
         gt_bboxes[:, 1::2] = gt_bboxes[:, 1::2] / image_width
 
         file_path = os.path.join(self._image_dir, self._img_info_dict[img_id]['file_name'])
-        return file_path, gt_bboxes, image_height, image_width, gt_labels, gt_labels_text
+        return file_path, gt_bboxes, image_height, image_width, gt_labels
 
 
 def get_dataset(root_dir='D:\\data\\COCO2017',
@@ -143,12 +143,12 @@ def get_dataset(root_dir='D:\\data\\COCO2017',
         coco_dataset = _COCO_VAL_DATASET
 
     def _parse_coco_data_py(img_id):
-        file_path, gt_bboxes, image_height, image_width, gt_labels, gt_labels_text = coco_dataset[img_id]
-        return file_path, gt_bboxes, image_height, image_width, gt_labels, gt_labels_text
+        file_path, gt_bboxes, image_height, image_width, gt_labels = coco_dataset[img_id]
+        return file_path, gt_bboxes, image_height, image_width, gt_labels
 
     tf_dataset = tf.data.Dataset.from_tensor_slices(coco_dataset.img_ids).map(
         lambda img_id: tuple([*tf.py_func(_parse_coco_data_py, [img_id],
-                                          [tf.string, tf.float32, tf.int64, tf.int64, tf.int64, tf.string])])
+                                          [tf.string, tf.float32, tf.int64, tf.int64, tf.int64])])
     )
     tf_dataset = tf_dataset.map(
         lambda file_path, gt_bboxes, image_height, image_width, gt_labels, gt_labels_text: tuple([
@@ -160,9 +160,9 @@ def get_dataset(root_dir='D:\\data\\COCO2017',
     if argument:
         image_argument_partial = partial(image_argument_with_imgaug, iaa_sequence=iaa_sequence)
         tf_dataset = tf_dataset.map(
-            lambda image, bboxes, image_height, image_width, labels, labels_text: tuple([
+            lambda image, bboxes, image_height, image_width, labels: tuple([
                 *tf.py_func(image_argument_partial, [image, bboxes], [image.dtype, bboxes.dtype]),
-                image_height, image_width, labels, labels_text]),
+                image_height, image_width, labels]),
             num_parallel_calls=5
         )
 
