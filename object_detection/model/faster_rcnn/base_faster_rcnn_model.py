@@ -1,65 +1,71 @@
 import tensorflow as tf
 
-from object_detection.model.extractor.feature_extractor import Vgg16Extractor
-from object_detection.model.rpn import RegionProposal, AnchorTarget, RPNHead
-from object_detection.model.roi import ProposalTarget, RoiPooling, RoiHead
+from object_detection.model.region_proposal import RegionProposal
+from object_detection.model.anchor_target import AnchorTarget
+from object_detection.model.proposal_target import ProposalTarget
+from object_detection.model.roi_pooling import RoiPoolingCropAndResize
 from object_detection.model.losses import smooth_l1_loss, cls_loss
 from object_detection.utils.anchors import generate_by_anchor_base_tf, generate_anchor_base
-from object_detection.model.post_ops import post_ops_prediction
+from object_detection.model.prediction import post_ops_prediction
 
-__all__ = ['Vgg16FasterRcnn']
+__all__ = ['BaseFasterRcnn']
+layers = tf.keras.layers
 
 
-class Vgg16FasterRcnn(tf.keras.Model):
+class BaseFasterRcnn(tf.keras.Model):
     def __init__(self,
-                 slim_ckpt_file_path=None,
+                 # 通用参数
+                 num_classes,
+                 weight_decay,
+                 ratios,
+                 scales,
+                 extractor_stride,
 
-                 num_classes=21,
-                 weight_decay=0.0001,
+                 # region proposal & anchor target 通用参数
+                 rpn_proposal_means,
+                 rpn_proposal_stds,
 
-                 ratios=[0.5, 1.0, 2.0],
-                 scales=[8, 16, 32],
-                 extractor_stride=16,
+                 # region proposal 参数
+                 rpn_proposal_num_pre_nms_train,
+                 rpn_proposal_num_post_nms_train,
+                 rpn_proposal_num_pre_nms_test,
+                 rpn_proposal_num_post_nms_test,
+                 rpn_proposal_nms_iou_threshold,
 
-                 rpn_proposal_means=[0, 0, 0, 0],
-                 rpn_proposal_stds=[1.0, 1.0, 1.0, 1.0],
+                 # anchor target 以及相关损失函数参数
+                 rpn_sigma,
+                 rpn_training_pos_iou_threshold,
+                 rpn_training_neg_iou_threshold,
+                 rpn_training_total_num_samples,
+                 rpn_training_max_pos_samples,
 
-                 rpn_proposal_num_pre_nms_train=12000,
-                 rpn_proposal_num_post_nms_train=2000,
-                 rpn_proposal_num_pre_nms_test=6000,
-                 rpn_proposal_num_post_nms_test=300,
-                 rpn_proposal_nms_iou_threshold=0.7,
+                 # roi head & proposal target 参数
+                 roi_proposal_means,
+                 roi_proposal_stds,
 
-                 rpn_sigma=3.0,
-                 rpn_training_pos_iou_threshold=0.7,
-                 rpn_training_neg_iou_threshold=0.3,
-                 rpn_training_total_num_samples=256,
-                 rpn_training_max_pos_samples=128,
+                 # roi pooling 参数
+                 roi_pool_size,
 
-                 roi_proposal_means=[0, 0, 0, 0],
-                 roi_proposal_stds=[1.0, 1.0, 1.0, 1.0],
+                 # proposal target 以及相关损失函数参数
+                 roi_sigma,
+                 roi_training_pos_iou_threshold,
+                 roi_training_neg_iou_threshold,
+                 roi_training_total_num_samples,
+                 roi_training_max_pos_samples,
 
-                 roi_pool_size=7,
-                 roi_head_keep_dropout_rate=0.5,
-                 roi_feature_size=7 * 7 * 512,
-
-                 roi_sigma=1,
-                 roi_training_pos_iou_threshold=0.5,
-                 roi_training_neg_iou_threshold=0.1,
-                 roi_training_total_num_samples=128,
-                 roi_training_max_pos_samples=32,
-
-                 prediction_max_objects_per_image=15,
-                 prediction_max_objects_per_class=5,
-                 prediction_nms_iou_threshold=0.3,
-                 prediction_score_threshold=0.3,
+                 # prediction 参数
+                 prediction_max_objects_per_image,
+                 prediction_max_objects_per_class,
+                 prediction_nms_iou_threshold,
+                 prediction_score_threshold,
                  ):
         super().__init__()
-        self._num_classes = num_classes
+        self.num_classes = num_classes
+        self.weight_decay = weight_decay
+        self.num_anchors = len(ratios) * len(scales)
 
         self._ratios = ratios
         self._scales = scales
-        self._num_anchors = len(ratios) * len(scales)
         self._extractor_stride = extractor_stride
         self._rpn_sigma = rpn_sigma
         self._roi_sigma = roi_sigma
@@ -72,14 +78,10 @@ class Vgg16FasterRcnn(tf.keras.Model):
         self._prediction_nms_iou_threshold = prediction_nms_iou_threshold
         self._prediction_score_threshold = prediction_score_threshold
 
-        self._extractor = Vgg16Extractor(weight_decay=weight_decay,
-                                         slim_ckpt_file_path=slim_ckpt_file_path)
-
-        self._rpn_head = RPNHead(self._num_anchors, weight_decay=weight_decay)
         self._anchor_generator = generate_by_anchor_base_tf
         self._anchor_base = tf.to_float(generate_anchor_base(extractor_stride, ratios, scales))
         self._rpn_proposal = RegionProposal(
-            num_anchors=self._num_anchors,
+            num_anchors=self.num_anchors,
             num_pre_nms_train=rpn_proposal_num_pre_nms_train,
             num_post_nms_train=rpn_proposal_num_post_nms_train,
             num_pre_nms_test=rpn_proposal_num_pre_nms_test,
@@ -96,12 +98,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
             target_means=rpn_proposal_means,
             target_stds=rpn_proposal_stds,
         )
-        self._roi_pooling = RoiPooling(pool_size=roi_pool_size)
-        self._roi_head = RoiHead(num_classes,
-                                 roi_feature_size=roi_feature_size,
-                                 keep_rate=roi_head_keep_dropout_rate,
-                                 weight_decay=weight_decay,
-                                 slim_ckpt_file_path=slim_ckpt_file_path)
+        self._roi_pooling = RoiPoolingCropAndResize(pool_size=roi_pool_size)
         self._proposal_target = ProposalTarget(
             pos_iou_threshold=roi_training_pos_iou_threshold,
             neg_iou_threshold=roi_training_neg_iou_threshold,
@@ -109,6 +106,19 @@ class Vgg16FasterRcnn(tf.keras.Model):
             max_pos_samples=roi_training_max_pos_samples,
             target_means=roi_proposal_means,
             target_stds=roi_proposal_stds)
+
+        self._extractor = self._get_extractor()
+        self._rpn_head = self._get_rpn_head()
+        self._roi_head = self._get_roi_head()
+
+    def _get_rpn_head(self):
+        raise NotImplementedError
+
+    def _get_roi_head(self):
+        raise NotImplementedError
+
+    def _get_extractor(self):
+        raise NotImplementedError
 
     def call(self, inputs, training=None, mask=None):
         if training:
@@ -139,7 +149,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
             rpn_labels, rpn_bbox_targets, rpn_in_weights, rpn_out_weights = self._anchor_target((gt_bboxes,
                                                                                                  image_shape,
                                                                                                  anchors,
-                                                                                                 self._num_anchors),
+                                                                                                 self.num_anchors),
                                                                                                 True)
             rpn_cls_loss, rpn_reg_loss = self._get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
                                                             rpn_labels, rpn_bbox_targets,
@@ -167,7 +177,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
 
             # pred_bboxes, pred_labels, pred_scores
             roi_score_softmax = tf.nn.softmax(roi_score)
-            roi_bboxes_txtytwth = tf.reshape(roi_bboxes_txtytwth, [-1, self._num_classes, 4])
+            roi_bboxes_txtytwth = tf.reshape(roi_bboxes_txtytwth, [-1, self.num_classes, 4])
             pred_rois, pred_labels, pred_scores = post_ops_prediction(roi_score_softmax, roi_bboxes_txtytwth,
                                                                       rois, image_shape,
                                                                       self._roi_proposal_means, self._roi_proposal_stds,
@@ -182,7 +192,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
     def _get_rpn_loss(self, rpn_score, rpn_bbox_txtytwth,
                       anchor_target_labels, anchor_target_bboxes_txtytwth,
                       anchor_target_in_weights, anchor_target_out_weights):
-        rpn_score = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self._num_anchors]), (0, 2, 1)), [-1, 2])
+        rpn_score = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self.num_anchors]), (0, 2, 1)), [-1, 2])
         rpn_selected = tf.where(anchor_target_labels >= 0)[:, 0]
         rpn_score_selected = tf.gather(rpn_score, rpn_selected)
         rpn_labels_selected = tf.gather(anchor_target_labels, rpn_selected)
@@ -247,64 +257,8 @@ class Vgg16FasterRcnn(tf.keras.Model):
         # final_rois, final_labels, final_bbox_targets, bbox_inside_weights, bbox_outside_weights
         return self._proposal_target((rois, gt_bboxes, gt_labels), True)
 
-    def load_tf_faster_rcnn_tf_weights(self, ckpt_file_path):
-        reader = tf.train.load_checkpoint(ckpt_file_path)
-        extractor = self.get_layer('vgg16')
-        extractor_dict = {
-            "vgg_16/conv1/conv1_1/": "block1_conv1",
-            "vgg_16/conv1/conv1_2/": "block1_conv2",
-
-            "vgg_16/conv2/conv2_1/": "block2_conv1",
-            "vgg_16/conv2/conv2_2/": "block2_conv2",
-
-            "vgg_16/conv3/conv3_1/": "block3_conv1",
-            "vgg_16/conv3/conv3_2/": "block3_conv2",
-            "vgg_16/conv3/conv3_3/": "block3_conv3",
-
-            "vgg_16/conv4/conv4_1/": "block4_conv1",
-            "vgg_16/conv4/conv4_2/": "block4_conv2",
-            "vgg_16/conv4/conv4_3/": "block4_conv3",
-
-            "vgg_16/conv5/conv5_1/": "block5_conv1",
-            "vgg_16/conv5/conv5_2/": "block5_conv2",
-            "vgg_16/conv5/conv5_3/": "block5_conv3",
-        }
-        for slim_tensor_name_pre in extractor_dict.keys():
-            extractor.get_layer(name=extractor_dict[slim_tensor_name_pre]).set_weights([
-                reader.get_tensor(slim_tensor_name_pre + 'weights'),
-                reader.get_tensor(slim_tensor_name_pre + 'biases'),
-            ])
-            tf.logging.info('successfully loaded weights for {}'.format(extractor_dict[slim_tensor_name_pre]))
-
-        rpn_head = self.get_layer('rpn_head')
-        rpn_head_dict = {
-            'vgg_16/rpn_conv/3x3/': 'rpn_first_conv',
-            'vgg_16/rpn_cls_score/': 'rpn_score_conv',
-            'vgg_16/rpn_bbox_pred/': 'rpn_bbox_conv',
-        }
-        for slim_tensor_name_pre in rpn_head_dict.keys():
-            rpn_head.get_layer(rpn_head_dict[slim_tensor_name_pre]).set_weights([
-                reader.get_tensor(slim_tensor_name_pre + 'weights'),
-                reader.get_tensor(slim_tensor_name_pre + 'biases')
-            ])
-            tf.logging.info('successfully loaded weights for {}'.format(rpn_head_dict[slim_tensor_name_pre]))
-
-        roi_head = self.get_layer('roi_head')
-        roi_head_dict = {
-            'vgg_16/fc6/': 'fc1',
-            'vgg_16/fc7/': 'fc2',
-            'vgg_16/bbox_pred/': 'roi_head_bboxes',
-            'vgg_16/cls_score/': 'roi_head_score'
-        }
-        for slim_tensor_name_pre in roi_head_dict.keys():
-            roi_head.get_layer(roi_head_dict[slim_tensor_name_pre]).set_weights([
-                reader.get_tensor(slim_tensor_name_pre + 'weights'),
-                reader.get_tensor(slim_tensor_name_pre + 'biases')
-            ])
-            tf.logging.info('successfully loaded weights for {}'.format(roi_head_dict[slim_tensor_name_pre]))
-
     def test_one_image(self, img_path, min_size=600, max_size=1000, preprocessing_type='caffe'):
-        from object_detection.dataset.tf_dataset_utils import preprocessing_func
+        from dataset.utils.tf_dataset_utils import preprocessing_func
         import numpy as np
         img = tf.image.decode_jpeg(tf.io.read_file(img_path))
         h, w = img.shape[:2]
@@ -337,70 +291,7 @@ class Vgg16FasterRcnn(tf.keras.Model):
         roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),
                                          training=False)
         roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
-
         roi_score_softmax = tf.nn.softmax(roi_score)
+        rois = rois / tf.to_float(img_scale)
 
         return roi_score_softmax, roi_bboxes_txtytwth, rois
-
-    def get_rpn_loss_only(self, image, gt_bboxes):
-        image_shape = image.get_shape().as_list()[1:3]
-        tf.logging.debug('image shape is {}'.format(image_shape))
-
-        shared_features = self._extractor(image, training=True)
-        shared_features_shape = shared_features.get_shape().as_list()[1:3]
-        tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
-
-        anchors = self._anchor_generator(self._anchor_base, self._extractor_stride,
-                                         tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                         tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
-                                         )
-
-        tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
-
-        rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=True)
-
-        # rpn loss
-        rpn_labels, rpn_bbox_targets, rpn_in_weights, rpn_out_weights = self._anchor_target((gt_bboxes,
-                                                                                             image_shape,
-                                                                                             anchors,
-                                                                                             self._num_anchors),
-                                                                                            True)
-        rpn_cls_loss, rpn_reg_loss = self._get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
-                                                        rpn_labels, rpn_bbox_targets,
-                                                        rpn_in_weights, rpn_out_weights)
-
-        return rpn_cls_loss, rpn_reg_loss
-
-    def get_roi_loss_only(self, image, gt_bboxes, gt_labels):
-        image_shape = image.get_shape().as_list()[1:3]
-        tf.logging.debug('image shape is {}'.format(image_shape))
-
-        shared_features = self._extractor(image, training=True)
-        shared_features_shape = shared_features.get_shape().as_list()[1:3]
-        tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
-
-        anchors = self._anchor_generator(self._anchor_base, self._extractor_stride,
-                                         tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
-                                         tf.to_int32(tf.ceil(image_shape[1] / self._extractor_stride))
-                                         )
-
-        tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
-
-        rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=True)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
-                                  training=True)
-
-        # roi loss
-        final_rois, roi_labels, roi_bbox_target, roi_in_weights, roi_out_weights = self._proposal_target((rois,
-                                                                                                          gt_bboxes,
-                                                                                                          gt_labels,
-                                                                                                          ),
-                                                                                                         True)
-        # 训练时，只计算 proposal target 的 roi_features，一般只有128个
-        roi_features = self._roi_pooling((shared_features, final_rois, self._extractor_stride),
-                                         training=True)
-        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=True)
-        roi_cls_loss, roi_reg_loss = self._get_roi_loss(roi_score, roi_bboxes_txtytwth,
-                                                        roi_labels, roi_bbox_target,
-                                                        roi_in_weights, roi_out_weights)
-        return roi_cls_loss, roi_reg_loss

@@ -1,15 +1,11 @@
-import matplotlib
-
-matplotlib.use('agg')
-
 import tensorflow as tf
 import numpy as np
 import os
 import sys
 import argparse
-from object_detection.utils.evaluation.pascal_eval_utils import get_prediction_files
-from object_detection.utils.evaluation.detectron_pascal_ap_utils import voc_eval
-from object_detection.model.vgg16_faster_rcnn import Vgg16FasterRcnn
+from object_detection.evaluation.pascal_eval_files_utils import get_prediction_files
+from object_detection.evaluation.detectron_pascal_evaluation_utils import voc_eval
+from object_detection.model.faster_rcnn.vgg16_faster_rcnn import Vgg16FasterRcnn
 from object_detection.config.faster_rcnn_config import PASCAL_CONFIG as CONFIG
 from tensorflow.contrib.eager.python import saver as eager_saver
 
@@ -32,6 +28,7 @@ class_list = ('__background__',  # always index 0
 
 def eval_from_scratch(model,
                       dataset_type='tf',
+                      preprocessing_type='caffe',
                       root_path='/home/tensorflow05/data/VOCdevkit/VOC2007',
                       result_file_format='/home/tensorflow05/zyy/tf_eager_object_detection/results/{:s}.txt',
                       cache_dir='/home/tensorflow05/zyy/tf_eager_object_detection/results',
@@ -46,6 +43,7 @@ def eval_from_scratch(model,
                       ):
     """
 
+    :param preprocessing_type:
     :param model:                       导入好参数的模型
     :param dataset_type:                训练时使用的原始数据是通过 cv2 产生还是 tf 产生
     :param root_path:                   VOC的目录，要具体到某一年
@@ -62,13 +60,16 @@ def eval_from_scratch(model,
     """
     # 生成检测结果的本地文件
     get_prediction_files(model,
+                         preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
+                         min_edge=CONFIG['image_min_size'], max_edge=CONFIG['image_max_size'],
                          dataset_type=dataset_type,
                          data_root_path=root_path,
                          mode='test',
                          result_file_format=result_file_format,
                          score_threshold=prediction_score_threshold, iou_threshold=iou_threshold,
                          max_objects_per_class=max_objects_per_class, max_objects_per_image=max_objects_per_image,
-                         target_means=target_means, target_stds=target_stds)
+                         target_means=target_means, target_stds=target_stds,
+                         )
 
     # 通过本地文件（包括检测结果和真实结果）计算map
     eval_by_local_files_and_gt_xmls(root_path,
@@ -175,6 +176,8 @@ def parse_args():
     parser.add_argument('--use_local_result_files', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
                         default='cv2', type=str)
+    parser.add_argument('--preprocessing_type', help='caffe or tf',
+                        default='caffe', type=str)
     #     parser.add_argument('--root_path', help='path to pascal voc 2007',
     #                         default='D:\\data\\VOCdevkit\\VOC2007', type=str)
     #     parser.add_argument('--result_file_format', help='local detection result file pattern',
@@ -211,6 +214,7 @@ def main(args):
     else:
         _load_from_ckpt_file(cur_model, args.ckpt_file_path)
     eval_from_scratch(cur_model,
+                      preprocessing_type=args.preprocessing_type,
                       dataset_type=args.dataset_type,
                       root_path=args.root_path,
                       result_file_format=args.result_file_format,

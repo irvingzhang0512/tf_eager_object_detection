@@ -4,7 +4,7 @@ import tensorflow as tf
 from functools import partial
 from pycocotools.coco import COCO
 
-from object_detection.dataset.tf_dataset_utils import image_argument_with_imgaug, preprocessing_func
+from object_detection.dataset.utils.tf_dataset_utils import image_argument_with_imgaug, preprocessing_func
 
 
 _COCO_TRAIN_DATASET = None

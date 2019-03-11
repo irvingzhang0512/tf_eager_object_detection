@@ -4,6 +4,9 @@ from object_detection.utils.bbox_transform import decode_bbox_with_mean_and_std
 from object_detection.utils.bbox_tf import bboxes_clip_filter as bboxes_clip_filter_tf
 
 
+__all__ = ['post_ops_prediction']
+
+
 def predict_after_roi(roi_scores_softmax, roi_txtytwth, rois, image_shape,
                       target_means, target_stds,
                       max_num_per_class=5,

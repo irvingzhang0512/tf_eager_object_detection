@@ -2,8 +2,8 @@ import os
 import sys
 import tensorflow as tf
 import argparse
-import object_detection.dataset.tf_record_utils as dataset_utils
-import object_detection.dataset.label_map_utils as label_map_utils
+import object_detection.dataset.utils.tf_record_utils as dataset_utils
+import object_detection.dataset.utils.label_map_utils as label_map_utils
 from tqdm import tqdm
 from lxml import etree
 

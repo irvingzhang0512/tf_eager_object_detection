@@ -4,15 +4,15 @@ import argparse
 import numpy as np
 import tensorflow as tf
 
-from object_detection.model.vgg16_faster_rcnn import Vgg16FasterRcnn
+from object_detection.model.faster_rcnn.vgg16_faster_rcnn import Vgg16FasterRcnn
 from object_detection.config.faster_rcnn_config import COCO_CONFIG, PASCAL_CONFIG
 from object_detection.utils.visual_utils import show_one_image
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as pascal_get_dataset
 from object_detection.dataset.coco_tf_dataset_generator import get_dataset as coco_get_dataset
 from tensorflow.contrib.summary import summary
 from tensorflow.contrib.eager.python import saver as eager_saver
-from tqdm import tqdm
 from tensorflow.python.platform import tf_logging
+from tqdm import tqdm
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -128,7 +128,7 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal', dat
         file_names = [os.path.join(data_root_path, 'pascal_trainval_%02d.tfrecords' % i) for i in range(5)]
         dataset = pascal_get_dataset(file_names,
                                      min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
-                                     preprocessing_type=preprocessing_type,
+                                     preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
                                      argument=True, shuffle=True)
     elif dataset_type == 'coco':
         dataset = coco_get_dataset(root_dir=data_root_path, mode='train',
@@ -224,7 +224,9 @@ def train_one_epoch(dataset, base_model, optimizer, loss_type,
                     gt_channels = tf.split(gt_bboxes, 4, axis=1)
                     show_gt_bboxes = tf.concat([gt_channels[1], gt_channels[0], gt_channels[3], gt_channels[2]], axis=1)
                     gt_image = show_one_image(tf.squeeze(image, axis=0).numpy(), show_gt_bboxes.numpy(),
-                                              gt_labels.numpy(), enable_matplotlib=False)
+                                              gt_labels.numpy(),
+                                              preprocess_type='caffe', caffe_pixel_means=CONFIG['bgr_pixel_means'],
+                                              enable_matplotlib=False)
                     tf.contrib.summary.image("gt_image", tf.expand_dims(gt_image, axis=0))
 
                     # pred
@@ -236,7 +238,9 @@ def train_one_epoch(dataset, base_model, optimizer, loss_type,
                     ], axis=1)
                     pred_image = show_one_image(tf.squeeze(image, axis=0).numpy(),
                                                 show_pred_bboxes.numpy(),
-                                                pred_labels.numpy(), enable_matplotlib=False)
+                                                pred_labels.numpy(),
+                                                preprocess_type='caffe', caffe_pixel_means=CONFIG['bgr_pixel_means'],
+                                                enable_matplotlib=False)
                     tf.contrib.summary.image("pred_image", tf.expand_dims(pred_image, axis=0))
 
         # logging

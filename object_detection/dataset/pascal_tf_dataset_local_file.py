@@ -2,8 +2,8 @@ import tensorflow as tf
 import numpy as np
 import cv2
 import os
-import object_detection.dataset.label_map_utils as label_map_utils
-import object_detection.dataset.tf_record_utils as dataset_utils
+import object_detection.dataset.utils.label_map_utils as label_map_utils
+import object_detection.dataset.utils.tf_record_utils as dataset_utils
 from lxml import etree
 
 

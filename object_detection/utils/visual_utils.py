@@ -21,31 +21,30 @@ def draw_bboxes_with_labels(image, bboxes, label_texts):
         label_texts = label_texts.numpy()
     idx = 0
     for bbox in bboxes:
-        try:
-            ymin, xmin, ymax, xmax = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-            cv2.rectangle(image, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
-            if label_texts is not None:
-                cv2.putText(img=image,
-                            text=str(label_texts[idx]),
-                            org=(xmin, ymin + 20),
-                            fontFace=cv2.FONT_HERSHEY_COMPLEX,
-                            fontScale=1e-3 * image.shape[0],
-                            color=(0, 0, 255),
-                            thickness=2
+        ymin, xmin, ymax, xmax = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+        cv2.rectangle(image, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
+        if label_texts is not None:
+            cv2.putText(img=image,
+                        text=str(label_texts[idx]),
+                        org=(xmin, ymin + 20),
+                        fontFace=cv2.FONT_HERSHEY_COMPLEX,
+                        fontScale=1e-3 * image.shape[0],
+                        color=(0, 0, 255),
+                        thickness=2,
                         )
-        except:
-            print(bbox, bboxes.shape)
         idx += 1
     return image
 
 
-def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', figsize=(15, 10), enable_matplotlib=True):
+def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', caffe_pixel_means=None,
+                   figsize=(15, 10), enable_matplotlib=True):
     """
     显示图片
     :param image:
     :param bboxes:
     :param labels_text:
     :param preprocess_type:
+    :param caffe_pixel_means:
     :param figsize:
     :param enable_matplotlib:
     :return:
@@ -58,14 +57,14 @@ def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', fig
         labels_text = labels_text.numpy()
     # 因为原始数据中，将 bboxes 范围限定在 [0, height-1] [0, width - 1] 中，所以显示的时候，要要返回1
     if preprocess_type == 'caffe':
-        cur_means = [102.9801, 115.9465, 122.7717]
+        cur_means = caffe_pixel_means
         image[..., 0] += cur_means[0]
         image[..., 1] += cur_means[1]
         image[..., 2] += cur_means[2]
         image = image[..., ::-1]
         image = image.astype(np.uint8)
     elif preprocess_type == 'tf':
-        image = ((image + 1.0)/2.0) * 255.0
+        image = ((image + 1.0) / 2.0) * 255.0
         image = image.astype(np.uint8)
     elif preprocess_type is None:
         pass

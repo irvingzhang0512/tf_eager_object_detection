@@ -2,9 +2,9 @@ import tensorflow as tf
 import imgaug as ia
 from imgaug import augmenters as iaa
 import numpy as np
+from functools import partial
 
-
-__all__ = ['image_argument_with_imgaug', 'preprocessing_func']
+__all__ = ['image_argument_with_imgaug', 'preprocessing_func', ]
 
 
 def _get_default_iaa_sequence():
@@ -52,7 +52,7 @@ def image_argument_with_imgaug(image, bboxes, iaa_sequence=None):
     return image_aug, bboxes_aug_np.astype(np.float32)
 
 
-def _caffe_preprocessing(image):
+def _caffe_preprocessing(image, pixel_means):
     """
     输入 uint8 RGB 的图像，转换为 tf.float32 BGR 格式，并减去 imagenet 平均数
     :param image:
@@ -65,10 +65,9 @@ def _caffe_preprocessing(image):
 
     image = tf.to_float(image)
     image = tf.reverse(image, axis=[-1])
-    means = [102.9801, 115.9465, 122.7717]
     channels = tf.split(axis=-1, num_or_size_splits=3, value=image)
     for i in range(3):
-        channels[i] -= means[i]
+        channels[i] -= pixel_means[i]
     return tf.concat(axis=-1, values=channels)
 
 
@@ -82,13 +81,12 @@ def _tf_preprocessing(image):
 
 
 def preprocessing_func(image, bboxes, height, width, labels,
-                       min_size, max_size, preprocessing_type):
+                       min_size, max_size, preprocessing_type, caffe_pixel_means=None):
     """
     rescale image
     1) 短边最短为600，长边最长为2000，矛盾时，优先满足长边2000
     2) preprocessing
     3) 通过 preprocessing_type 选择 preprocessing 函数
-    :param preprocessing_type:
     :param width:
     :param height:
     :param max_size:
@@ -96,11 +94,13 @@ def preprocessing_func(image, bboxes, height, width, labels,
     :param image:
     :param bboxes:
     :param labels:
+    :param preprocessing_type:
+    :param caffe_pixel_means:
     :return:
     """
 
     if preprocessing_type == 'caffe':
-        preprocessing_fn = _caffe_preprocessing
+        preprocessing_fn = partial(_caffe_preprocessing, pixel_means=caffe_pixel_means)
     elif preprocessing_type == 'tf':
         preprocessing_fn = _tf_preprocessing
     else:

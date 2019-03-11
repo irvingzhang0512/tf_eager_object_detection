@@ -3,6 +3,8 @@ def get_default_pascal_faster_rcnn_config():
         # base configs
         'num_classes': 21,
         'extractor_stride': 16,
+        # 'bgr_pixel_means': [103.939, 116.779, 123.68],
+        'bgr_pixel_means': [102.9801, 115.9465, 122.7717],
 
         # preprocessing configs
         'image_max_size': 1000,
