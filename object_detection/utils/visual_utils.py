@@ -30,20 +30,23 @@ def draw_bboxes_with_labels(image, bboxes, label_texts):
                         fontFace=cv2.FONT_HERSHEY_COMPLEX,
                         fontScale=1e-3 * image.shape[0],
                         color=(0, 0, 255),
-                        thickness=2
+                        thickness=2,
                         )
         idx += 1
     return image
 
 
-def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', figsize=(15, 10)):
+def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', caffe_pixel_means=None,
+                   figsize=(15, 10), enable_matplotlib=True):
     """
     显示图片
     :param image:
     :param bboxes:
     :param labels_text:
     :param preprocess_type:
+    :param caffe_pixel_means:
     :param figsize:
+    :param enable_matplotlib:
     :return:
     """
     if isinstance(image, tf.Tensor):
@@ -52,23 +55,25 @@ def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', fig
         bboxes = bboxes.numpy()
     if isinstance(labels_text, tf.Tensor):
         labels_text = labels_text.numpy()
+    # 因为原始数据中，将 bboxes 范围限定在 [0, height-1] [0, width - 1] 中，所以显示的时候，要要返回1
     if preprocess_type == 'caffe':
-        cur_means = [103.939, 116.779, 123.68]
+        cur_means = caffe_pixel_means
         image[..., 0] += cur_means[0]
         image[..., 1] += cur_means[1]
         image[..., 2] += cur_means[2]
         image = image[..., ::-1]
         image = image.astype(np.uint8)
     elif preprocess_type == 'tf':
-        image = ((image + 1.0)/2.0) * 255.0
+        image = ((image + 1.0) / 2.0) * 255.0
         image = image.astype(np.uint8)
     elif preprocess_type is None:
         pass
     else:
         raise ValueError('unknown preprocess_type {}'.format(preprocess_type))
     image_with_bboxes = draw_bboxes_with_labels(image, bboxes, labels_text)
-    plt.figure(figsize=figsize)
-    plt.imshow(image_with_bboxes)
-    plt.show()
+    if enable_matplotlib:
+        plt.figure(figsize=figsize)
+        plt.imshow(image_with_bboxes)
+        plt.show()
 
     return image_with_bboxes
