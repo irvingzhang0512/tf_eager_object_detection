@@ -1,11 +1,11 @@
 # TF EAGER OBJECT DETECTION
 
 ## 0. Targets
-+ 小目标……实现中……
 + TensorFlow Eager Mode.
 + Object Detection Model.
-    + faster rcnn -> mask rcnn
-    + ssd
+    + [x] faster rcnn
+    + [ ] ssd
+    + [ ] mask rcnn
 
 
 ## 1. Architecture
@@ -64,15 +64,20 @@
 + [ ] add resnet faster rcnn model.
 
 
-## 3. 训练记录
+## 3. training records
++ load tf-faster-rcnn pre-trained model，mAP of pascal 2007 test set is 0.71。
++ end-to-end training：load slim pretrained model (`logs-pascal-slim`):
+    + SGD，1e-3 -> 1e-4: after 14 epochs, mAP is 0.6935(or 0.6869)。
+    + SGD，1e-3 -> 1e-4，without data argument: after 14 epochs, mAP is 0.6659。
++ alt training：load slim pretrained model
+    + Step 1: training extractor & rpn head(rpn loss, 14 epochs, no l2 loss, `logs-pascal-slim-rpn`)
+    + Step 2: training roi head & roi pooling(roi loss, 14 epochs, `logs-pascal-slim-roi-after-rpn`)
+    + Step 3: training rpn head only(rpn loss, 14 epochs, `logs-pascal-slim-rpn-only`), mAP is 0.6683.
+    + Step 4: training roi head only(roi loss, 14 epochs, `logs-pascal-slim-roi-only`), mAP is 0.6733.
 
-+ 整体导入 tf-faster-rcnn 模型，直接预测，map结果为0.71。
-+ end-to-end training：使用 slim pretrained model 训练整体模型（`logs-pascal-slim`）：
-    + SGD，1e-3 -> 1e-4：14个epoch后map为0.6935（0.6869）。
-    + SGD，1e-3 -> 1e-4，输入数据无镜像增强：14个epoch后map为0.6659。
-+ alt training：使用 slim pretrained model
-    + 第一步：只训练 extractor & rpn head（14个epoch，无l2 loss，`logs-pascal-slim-rpn`）。
-    + 第二步：训练 roi head & roi pooling（14个epoch，`logs-pascal-slim-roi-after-rpn`）。
-    + 第三步：只训练 rpn head（14个epoch，`logs-pascal-slim-rpn-only`），map为0.6683。
-    + 第四步：只训练 roi head（14个epoch，`logs-pascal-slim-roi-only`），map为0.6733。
-    
+
+## 4. 可有可无的教程……
++ training on pascal voc 2007 trainval set, evaluating on pascal voc 2007 test set.
++ Step 1: generate trainval datasets, set configs and use `python scripts/generate_pascal_tf_records.py` to generate tf records.
++ Step 2: training by `python scripts/train.py`, get logs at `/path/to/logs_dir/`.
++ Step 3: evaluating by `python scripts/eval_pascal.py /path/to/logs_dir/ckpt`.

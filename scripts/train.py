@@ -122,10 +122,13 @@ def _get_default_optimizer(use_adam):
         return tf.train.MomentumOptimizer(lr, momentum=CONFIG['optimizer_momentum'])
 
 
-def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal', data_root_path=None):
+def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
+                          pascal_mode='trainval', pascal_tf_records_num=5,
+                          data_root_path=None):
     if dataset_type == 'pascal':
-        # 使用 trainaval 模式的 tfrecords 文件，共5个
-        file_names = [os.path.join(data_root_path, 'pascal_trainval_%02d.tfrecords' % i) for i in range(5)]
+        base_pattern = 'pascal_{}_%02d.tfrecords'.format(pascal_mode)
+        file_names = [os.path.join(data_root_path, base_pattern % i)
+                      for i in range(pascal_tf_records_num)]
         dataset = pascal_get_dataset(file_names,
                                      min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
                                      preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
@@ -146,7 +149,7 @@ def _get_rpn_l2_loss(base_model):
         if 'bias' in var.name or 'block1' in var.name or 'block2' in var.name:
             continue
         l2_loss = l2_loss + tf.reduce_sum(tf.square(var))
-    for var in base_model.get_layer('rpn_head').variables:
+    for var in base_model.get_layer('vgg16_rpn_head').variables:
         if 'bias' in var.name:
             continue
         l2_loss = l2_loss + tf.reduce_sum(tf.square(var))
@@ -156,7 +159,7 @@ def _get_rpn_l2_loss(base_model):
 
 def _get_roi_l2_loss(base_model):
     l2_loss = 0
-    for var in base_model.get_layer('roi_head').variables:
+    for var in base_model.get_layer('vgg16_roi_head').variables:
         if 'bias' in var.name:
             continue
         l2_loss = l2_loss + tf.reduce_sum(tf.square(var))
@@ -313,6 +316,8 @@ def parse_args():
   """
     parser = argparse.ArgumentParser(description='Train a Fast R-CNN model')
     parser.add_argument('--data_type', default="pascal", type=str, help='pascal or coco')
+    parser.add_argument('--pascal_mode', default="trainval", type=str, help='pascal training set mode')
+    parser.add_argument('--pascal_tf_records_num', default=5, type=int, help='number of pascal tf records')
     parser.add_argument('--logging_every_n_steps', default=100, type=int)
     parser.add_argument('--saving_every_n_steps', default=5000, type=int)
     parser.add_argument('--summary_every_n_steps', default=100, type=int)
@@ -322,13 +327,14 @@ def parse_args():
     parser.add_argument('--exclude_str', type=str, default=None, help='remove var with exclude_str to train.')
 
     # parser.add_argument('--data_root_path', default="/ssd/zhangyiyang/COCO2017", type=str)
-    parser.add_argument('--data_root_path', type=str,
+    parser.add_argument('--data_root_path', type=str, help='if data_type is pascal: path to save tf record files',
                         default="/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records")
-    parser.add_argument('--logs_dir', type=str,
-                        default="/ssd/zhangyiyang/test/tf_eager_object_detection/logs/logs-pascal-slim-adam-1e-3")
-    parser.add_argument('--slim_ckpt_file_path', type=str,
-                        default="/ssd/zhangyiyang/slim/vgg_16.ckpt")
-    parser.add_argument('--tf_faster_rcnn_ckpt_file_path', type=str, default=None)
+    parser.add_argument('--logs_dir', type=str, help='path to save ckpt files and tensorboard summaries.',
+                        default="/ssd/zhangyiyang/test/tf_eager_object_detection/logs/logs-pascal-slim")
+    parser.add_argument('--slim_ckpt_file_path', type=str, default=None,
+                        help='slim pre-trained model file path, if None, use keras pre-trained model.')
+    parser.add_argument('--tf_faster_rcnn_ckpt_file_path', type=str, default=None,
+                        help='github repo tf-faster-rcnn pre-trained model')
     # parser.add_argument('--tf_faster_rcnn_ckpt_file_path', type=str,
     #                     default='/ssd/zhangyiyang/tf_eager_object_detection/voc_2007_trainval/'
     #                             'vgg16_faster_rcnn_iter_70000.ckpt')
@@ -356,7 +362,11 @@ def main(args):
     global EXCLUDE
     EXCLUDE = args.exclude_str
 
-    train(training_dataset=_get_training_dataset('caffe', args.data_type, args.data_root_path),
+    train(training_dataset=_get_training_dataset('caffe',
+                                                 dataset_type=args.data_type,
+                                                 pascal_mode=args.pascal_mode,
+                                                 pascal_tf_records_num=args.pascal_tf_records_num,
+                                                 data_root_path=args.data_root_path),
           base_model=_get_default_vgg16_model(slim_ckpt_file_path=args.slim_ckpt_file_path),
           optimizer=_get_default_optimizer(args.use_adam),
           loss_type=args.loss_type,
