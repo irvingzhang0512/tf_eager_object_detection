@@ -51,9 +51,9 @@ class RegionProposal(tf.keras.Model):
         """
         # [num_anchors*feature_width*feature_height, 4]
         # [num_anchors*feature_width*feature_height, 4]
-        # [num_anchors*feature_width*feature_height,]
+        # [feature_width*feature_height, 2*num_anchors]
         # [2, ]
-        bboxes_txtytwth, anchors, scores, image_shape, extractor_stride = inputs
+        bboxes_txtytwth, anchors, scores, image_shape = inputs
 
         # 1. 使用anchors使用rpn_pred修正，获取所有预测结果。
         # [num_anchors*feature_width*feature_height, 4]

@@ -48,7 +48,6 @@ def get_default_pascal_faster_rcnn_config():
         # roi net configs
         'roi_proposal_means': [0, 0, 0, 0],
         'roi_proposal_stds': [0.1, 0.1, 0.2, 0.2],
-        'roi_feature_size': (7, 7, 512),
         'roi_pooling_size': 7,
         'roi_head_keep_dropout_rate': 0.5,
         'roi_sigma': 1.0,
