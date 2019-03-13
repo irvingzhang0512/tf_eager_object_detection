@@ -2,6 +2,7 @@ def get_default_pascal_faster_rcnn_config():
     return {
         # 不同backbone参数
         'resnet_roi_feature_size': [7, 7, 256],
+        'roi_head_keep_dropout_rate': 0.5,
 
         # base configs
         'num_classes': 21,
@@ -14,8 +15,7 @@ def get_default_pascal_faster_rcnn_config():
         # preprocessing configs
         'image_max_size': 1024,
         'image_min_size': 800,
-        'bgr_pixel_means': [102.9801, 115.9465, 122.7717],
-        # 'bgr_pixel_means': [103.939, 116.779, 123.68],
+        'bgr_pixel_means': [103.939, 116.779, 123.68],
 
         # predict & evaluate configs
         'evaluate_iou_threshold': 0.5,  # 计算map时使用，pred与gt的iou大于该阈值，则当前pred为TP，否则为FP
@@ -58,7 +58,6 @@ def get_default_pascal_faster_rcnn_config():
         'roi_proposal_means': [0, 0, 0, 0],
         'roi_proposal_stds': [0.1, 0.1, 0.2, 0.2],
         'roi_pooling_size': 7,
-        'roi_head_keep_dropout_rate': 0.5,
         'roi_sigma': 1.0,
         'roi_pos_iou_threshold': 0.5,
         'roi_neg_iou_threshold': 0.1,

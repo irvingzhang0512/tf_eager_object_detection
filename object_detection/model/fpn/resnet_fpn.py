@@ -212,7 +212,6 @@ class ResnetRoiHead(tf.keras.Model):
         对每个 roi pooling 的结果进行预测（预测bboxes）
         :param inputs:  roi_features, [num_rois, pool_size, pool_size, num_channels]
         :param training:
-        :param mask:
         :return:
         """
         x = self._flatten_layer(inputs)
@@ -227,16 +226,6 @@ class ResnetRoiHead(tf.keras.Model):
 
 
 class ResnetV1Fpn(BaseFPN):
-    def _get_roi_head(self):
-        return ResnetRoiHead(num_classes=self.num_classes,
-                             roi_feature_size=self.roi_feature_size,
-                             keep_rate=self._roi_head_keep_dropout_rate,
-                             weight_decay=self.weight_decay,
-                             )
-
-    def _get_extractor(self):
-        return get_resnet_v1_extractor(self._depth)
-
     def __init__(self,
                  depth=50,
                  roi_head_keep_dropout_rate=0.5,
@@ -351,3 +340,14 @@ class ResnetV1Fpn(BaseFPN):
             prediction_nms_iou_threshold=prediction_nms_iou_threshold,
             prediction_score_threshold=prediction_score_threshold,
         )
+
+    def _get_roi_head(self):
+        return ResnetRoiHead(num_classes=self.num_classes,
+                             roi_feature_size=self.roi_feature_size,
+                             keep_rate=self._roi_head_keep_dropout_rate,
+                             weight_decay=self.weight_decay,
+                             )
+
+    def _get_extractor(self):
+        return get_resnet_v1_extractor(self._depth)
+

@@ -89,7 +89,7 @@ class BaseFPN(tf.keras.Model):
 
         # 生成 base anchors
         self._anchor_base_list = []
-        for base_size in zip(anchor_stride_list, base_anchor_size_list):
+        for base_size in base_anchor_size_list:
             self._anchor_base_list.append(tf.to_float(generate_anchor_base(base_size, ratios, scales)))
 
         # 计算损失函数所需参数
