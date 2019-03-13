@@ -4,7 +4,7 @@
 + TensorFlow Eager Mode.
 + Object Detection Model.
     + [x] faster rcnn
-    + [ ] ssd
+    + [ ] fpn
     + [ ] mask rcnn
 
 
@@ -61,14 +61,14 @@
 + [x] add prediction_score_threshold for image summary.
 + [x] add model load/save functions.
 + [x] predict and visual scripts.
-+ [ ] add resnet faster rcnn model.
++ [x] add resnet faster rcnn model.
 
 
 ## 3. training records
 + load tf-faster-rcnn pre-trained model，mAP of pascal 2007 test set is 0.71。
 + end-to-end training：load slim pretrained model (`logs-pascal-slim`):
-    + SGD，1e-3 -> 1e-4: after 14 epochs, mAP is 0.6935(or 0.6869)。
-    + SGD，1e-3 -> 1e-4，without data argument: after 14 epochs, mAP is 0.6659。
+    + SGD，1e-3 -> 1e-4: after 14 epochs, mAP is 0.6935(or 0.6869).
+    + SGD，1e-3 -> 1e-4: without data argument: after 14 epochs, mAP is 0.6659.
 + alt training：load slim pretrained model
     + Step 1: training extractor & rpn head(rpn loss, 14 epochs, no l2 loss, `logs-pascal-slim-rpn`)
     + Step 2: training roi head & roi pooling(roi loss, 14 epochs, `logs-pascal-slim-roi-after-rpn`)

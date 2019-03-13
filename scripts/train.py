@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from object_detection.model.faster_rcnn.vgg16_faster_rcnn import Vgg16FasterRcnn
+from object_detection.model.faster_rcnn.resnet_faster_rcnn import ResNetFasterRcnn
 from object_detection.config.faster_rcnn_config import COCO_CONFIG, PASCAL_CONFIG
 from object_detection.utils.visual_utils import show_one_image
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as pascal_get_dataset
@@ -15,11 +16,6 @@ from tensorflow.python.platform import tf_logging
 from tqdm import tqdm
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
-config = tf.ConfigProto(allow_soft_placement=True)
-config.gpu_options.allow_growth = True
-tf.enable_eager_execution(config=config)
 tf_logging.set_verbosity(tf_logging.INFO)
 
 CONFIG = None
@@ -64,9 +60,10 @@ def train_step(model, loss, tape, optimizer):
     apply_gradients(model, optimizer, compute_gradients(model, loss, tape))
 
 
-def _get_default_vgg16_model(slim_ckpt_file_path=None):
-    return Vgg16FasterRcnn(
-        slim_ckpt_file_path=slim_ckpt_file_path,
+def _get_default_resnet_model(depth=50):
+    return ResNetFasterRcnn(
+        depth=depth,
+        roi_feature_size=CONFIG['resnet_roi_feature_size'],
 
         num_classes=CONFIG['num_classes'],
         weight_decay=CONFIG['weight_decay'],
@@ -94,8 +91,52 @@ def _get_default_vgg16_model(slim_ckpt_file_path=None):
         roi_proposal_stds=CONFIG['roi_proposal_stds'],
 
         roi_pool_size=CONFIG['roi_pooling_size'],
+
+        roi_sigma=CONFIG['roi_sigma'],
+        roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
+        roi_training_neg_iou_threshold=CONFIG['roi_neg_iou_threshold'],
+        roi_training_total_num_samples=CONFIG['roi_total_sample_number'],
+        roi_training_max_pos_samples=CONFIG['roi_pos_sample_max_number'],
+
+        prediction_max_objects_per_image=CONFIG['max_objects_per_image'],
+        prediction_max_objects_per_class=CONFIG['max_objects_per_class_per_image'],
+        prediction_nms_iou_threshold=CONFIG['predictions_nms_iou_threshold'],
+        prediction_score_threshold=CONFIG['prediction_score_threshold'],
+    )
+
+
+def _get_default_vgg16_model(slim_ckpt_file_path=None):
+    return Vgg16FasterRcnn(
+        slim_ckpt_file_path=slim_ckpt_file_path,
         roi_head_keep_dropout_rate=CONFIG['roi_head_keep_dropout_rate'],
-        roi_feature_size=CONFIG['roi_feature_size'],
+        roi_feature_size=CONFIG['vgg16_roi_feature_size'],
+
+        num_classes=CONFIG['num_classes'],
+        weight_decay=CONFIG['weight_decay'],
+
+        ratios=CONFIG['ratios'],
+        scales=CONFIG['scales'],
+        extractor_stride=CONFIG['extractor_stride'],
+
+        rpn_proposal_means=CONFIG['rpn_proposal_means'],
+        rpn_proposal_stds=CONFIG['rpn_proposal_stds'],
+
+        rpn_proposal_num_pre_nms_train=CONFIG['rpn_proposal_train_pre_nms_sample_number'],
+        rpn_proposal_num_post_nms_train=CONFIG['rpn_proposal_train_after_nms_sample_number'],
+        rpn_proposal_num_pre_nms_test=CONFIG['rpn_proposal_test_pre_nms_sample_number'],
+        rpn_proposal_num_post_nms_test=CONFIG['rpn_proposal_test_after_nms_sample_number'],
+        rpn_proposal_nms_iou_threshold=CONFIG['rpn_proposal_nms_iou_threshold'],
+
+        rpn_sigma=CONFIG['rpn_sigma'],
+        rpn_training_pos_iou_threshold=CONFIG['rpn_pos_iou_threshold'],
+        rpn_training_neg_iou_threshold=CONFIG['rpn_neg_iou_threshold'],
+        rpn_training_total_num_samples=CONFIG['rpn_total_sample_number'],
+        rpn_training_max_pos_samples=CONFIG['rpn_pos_sample_max_number'],
+
+        roi_proposal_means=CONFIG['roi_proposal_means'],
+        roi_proposal_stds=CONFIG['roi_proposal_stds'],
+
+        roi_pool_size=CONFIG['roi_pooling_size'],
 
         roi_sigma=CONFIG['roi_sigma'],
         roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
@@ -132,7 +173,7 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
         dataset = pascal_get_dataset(file_names,
                                      min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
                                      preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
-                                     argument=True, shuffle=True)
+                                     argument=True)
     elif dataset_type == 'coco':
         dataset = coco_get_dataset(root_dir=data_root_path, mode='train',
                                    min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
@@ -187,6 +228,7 @@ def train_step_end2end(image, gt_bboxes, gt_labels,
 
 
 def train_one_epoch(dataset, base_model, optimizer, loss_type,
+                    preprocessing_type,
                     logging_every_n_steps,
                     summary_every_n_steps,
                     saver, save_every_n_steps, save_path):
@@ -228,7 +270,8 @@ def train_one_epoch(dataset, base_model, optimizer, loss_type,
                     show_gt_bboxes = tf.concat([gt_channels[1], gt_channels[0], gt_channels[3], gt_channels[2]], axis=1)
                     gt_image = show_one_image(tf.squeeze(image, axis=0).numpy(), show_gt_bboxes.numpy(),
                                               gt_labels.numpy(),
-                                              preprocess_type='caffe', caffe_pixel_means=CONFIG['bgr_pixel_means'],
+                                              preprocess_type=preprocessing_type,
+                                              caffe_pixel_means=CONFIG['bgr_pixel_means'],
                                               enable_matplotlib=False)
                     tf.contrib.summary.image("gt_image", tf.expand_dims(gt_image, axis=0))
 
@@ -242,7 +285,8 @@ def train_one_epoch(dataset, base_model, optimizer, loss_type,
                     pred_image = show_one_image(tf.squeeze(image, axis=0).numpy(),
                                                 show_pred_bboxes.numpy(),
                                                 pred_labels.numpy(),
-                                                preprocess_type='caffe', caffe_pixel_means=CONFIG['bgr_pixel_means'],
+                                                preprocess_type=preprocessing_type,
+                                                caffe_pixel_means=CONFIG['bgr_pixel_means'],
                                                 enable_matplotlib=False)
                     tf.contrib.summary.image("pred_image", tf.expand_dims(pred_image, axis=0))
 
@@ -267,6 +311,7 @@ def train_one_epoch(dataset, base_model, optimizer, loss_type,
 
 
 def train(training_dataset, base_model, optimizer, loss_type,
+          preprocessing_type,
           logging_every_n_steps,
           save_every_n_steps,
           summary_every_n_steps,
@@ -301,7 +346,8 @@ def train(training_dataset, base_model, optimizer, loss_type,
         tf_logging.info('epoch %d starting...' % (i + 1))
         start = time.time()
         with train_writer.as_default(), summary.always_record_summaries():
-            train_one_epoch(training_dataset, base_model, optimizer, loss_type,
+            train_one_epoch(dataset=training_dataset, base_model=base_model,
+                            optimizer=optimizer, loss_type=loss_type, preprocessing_type=preprocessing_type,
                             logging_every_n_steps=logging_every_n_steps,
                             summary_every_n_steps=summary_every_n_steps,
                             saver=saver, save_every_n_steps=save_every_n_steps, save_path=ckpt_dir,
@@ -315,6 +361,8 @@ def parse_args():
   Parse input arguments
   """
     parser = argparse.ArgumentParser(description='Train a Fast R-CNN model')
+    parser.add_argument('--gpu_id', default="0", type=str, help='used in sys variable CUDA_VISIBLE_DEVICES')
+    parser.add_argument('--model', default="vgg16", type=str, help='one of [vgg16, resnet50, resnet101]')
     parser.add_argument('--data_type', default="pascal", type=str, help='pascal or coco')
     parser.add_argument('--pascal_mode', default="trainval", type=str, help='pascal training set mode')
     parser.add_argument('--pascal_tf_records_num', default=5, type=int, help='number of pascal tf records')
@@ -330,7 +378,9 @@ def parse_args():
     parser.add_argument('--data_root_path', type=str, help='if data_type is pascal: path to save tf record files',
                         default="/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records")
     parser.add_argument('--logs_dir', type=str, help='path to save ckpt files and tensorboard summaries.',
-                        default="/ssd/zhangyiyang/test/tf_eager_object_detection/logs/logs-pascal-slim")
+                        default="/ssd/zhangyiyang/test/tf_eager_object_detection/logs")
+    parser.add_argument('--logs_name', type=str, default='default',
+                        help='logs dir name pattern is `logs-{data_type}-{model}-{logs_name}`', )
     parser.add_argument('--slim_ckpt_file_path', type=str, default=None,
                         help='slim pre-trained model file path, if None, use keras pre-trained model.')
     parser.add_argument('--tf_faster_rcnn_ckpt_file_path', type=str, default=None,
@@ -348,6 +398,11 @@ def parse_args():
 
 
 def main(args):
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
+    tf.enable_eager_execution(config=config)
+
     global CONFIG
     if args.data_type == 'coco':
         CONFIG = COCO_CONFIG
@@ -356,27 +411,47 @@ def main(args):
     else:
         raise ValueError('unknown data_type {}'.format(args.data_type))
 
+    if args.model == 'vgg16':
+        cur_model = _get_default_vgg16_model(slim_ckpt_file_path=args.slim_ckpt_file_path)
+        preprocessing_type = 'caffe'
+    elif args.model == 'resnet50':
+        cur_model = _get_default_resnet_model(50)
+        preprocessing_type = 'caffe'
+    elif args.model == 'resnet101':
+        cur_model = _get_default_resnet_model(101)
+        preprocessing_type = 'caffe'
+    elif args.model == 'resnet152':
+        cur_model = _get_default_resnet_model(152)
+        preprocessing_type = 'caffe'
+    else:
+        raise ValueError('unknown model {}'.format(args.model))
+
     if args.loss_type not in ['total', 'roi', 'rpn']:
         raise ValueError('unknown loss type {}'.format(args.loss_type))
 
     global EXCLUDE
     EXCLUDE = args.exclude_str
 
-    train(training_dataset=_get_training_dataset('caffe',
+    # logs-{data_type}-{model}-{logs_name}
+    logs_name_pattern = 'logs-{}-{}-{}'
+    logs_path_name = logs_name_pattern.format(args.data_type, args.model, args.logs_name)
+
+    train(training_dataset=_get_training_dataset(preprocessing_type=preprocessing_type,
                                                  dataset_type=args.data_type,
                                                  pascal_mode=args.pascal_mode,
                                                  pascal_tf_records_num=args.pascal_tf_records_num,
                                                  data_root_path=args.data_root_path),
-          base_model=_get_default_vgg16_model(slim_ckpt_file_path=args.slim_ckpt_file_path),
+          base_model=cur_model,
           optimizer=_get_default_optimizer(args.use_adam),
           loss_type=args.loss_type,
+          preprocessing_type=preprocessing_type,
 
           logging_every_n_steps=args.logging_every_n_steps,
           save_every_n_steps=args.saving_every_n_steps,
           summary_every_n_steps=args.summary_every_n_steps,
 
-          train_dir=os.path.join(args.logs_dir, 'train'),
-          ckpt_dir=os.path.join(args.logs_dir, 'ckpt'),
+          train_dir=os.path.join(args.logs_dir, logs_path_name, 'train'),
+          ckpt_dir=os.path.join(args.logs_dir, logs_path_name, 'ckpt'),
           restore_ckpt_file_path=args.restore_ckpt_path,
           tf_faster_rcnn_ckpt_file_path=args.tf_faster_rcnn_ckpt_file_path,
           )

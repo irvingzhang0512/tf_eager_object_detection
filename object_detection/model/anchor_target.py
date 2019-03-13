@@ -77,7 +77,9 @@ class AnchorTarget(tf.keras.Model):
         num_bg = self._total_num_samples - tf.reduce_sum(tf.to_int32(tf.equal(labels, 1)))
         bg_inds = tf.where(tf.equal(labels, 0))[:, 0]
         if tf.size(bg_inds) > num_bg:
-            disable_inds = tf.random_shuffle(bg_inds)[num_bg:]
+            bg_inds = tf.random_shuffle(bg_inds)
+            disable_inds = bg_inds[num_bg:]
+            bg_inds = bg_inds[:num_bg]
             labels = tf.scatter_update(tf.Variable(labels), disable_inds, -1)
         tf.logging.debug('anchor target generate %d fgs and %d bgs.' % (tf.size(fg_inds), tf.size(bg_inds)))
 

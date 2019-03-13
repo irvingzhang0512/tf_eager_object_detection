@@ -10,7 +10,6 @@ class RoiPoolingCropAndResize(tf.keras.Model):
         super().__init__()
         self._pool_size = pool_size
         self._concat_layer = layers.Concatenate(axis=0)
-        self._flatten_layer = layers.Flatten()
         self._max_pool = layers.MaxPooling2D(padding='same')
 
     def call(self, inputs, training=None, mask=None):
@@ -43,7 +42,7 @@ class RoiPoolingCropAndResize(tf.keras.Model):
                                          box_ind=tf.to_int32(batch_ids),
                                          crop_size=[pre_pool_size, pre_pool_size],
                                          name="crops")
-        return self._flatten_layer(self._max_pool(crops))
+        return self._max_pool(crops)
 
 
 def crop_and_resize(image, boxes, box_ind, crop_size, pad_border=True):
@@ -116,8 +115,6 @@ class RoiPoolingRoiAlign(tf.keras.Model):
         super().__init__()
         self._pool_size = pool_size
         self._concat_layer = layers.Concatenate(axis=0)
-        self._flatten_layer = layers.Flatten()
-        self._max_pool = layers.MaxPooling2D(padding='same')
 
     def call(self, inputs, training=None, mask=None):
         """
@@ -131,7 +128,5 @@ class RoiPoolingRoiAlign(tf.keras.Model):
         # [1, height, width, channels]  [num_rois, 4]
         shared_layers, rois, extractor_stride = inputs
         rois = rois / extractor_stride
-
         net = roi_align(shared_layers, tf.stop_gradient(rois), self._pool_size)
-        net = self._flatten_layer(net)
         return net

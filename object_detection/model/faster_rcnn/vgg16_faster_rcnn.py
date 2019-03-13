@@ -13,18 +13,18 @@ class Vgg16FasterRcnn(BaseFasterRcnn):
                  # Vgg16FasterRcnn 特有参数
                  slim_ckpt_file_path=None,
                  roi_head_keep_dropout_rate=0.5,
-                 roi_feature_size=7 * 7 * 512,
+                 roi_feature_size=(7, 7, 512),
 
                  # 通用参数
                  num_classes=21,
                  weight_decay=0.0001,
-                 ratios=[0.5, 1.0, 2.0],
-                 scales=[8, 16, 32],
+                 ratios=(0.5, 1.0, 2.0),
+                 scales=(8, 16, 32),
                  extractor_stride=16,
 
                  # region proposal & anchor target 通用参数
-                 rpn_proposal_means=[0, 0, 0, 0],
-                 rpn_proposal_stds=[1.0, 1.0, 1.0, 1.0],
+                 rpn_proposal_means=(0, 0, 0, 0),
+                 rpn_proposal_stds=(1.0, 1.0, 1.0, 1.0),
 
                  # region proposal 参数
                  rpn_proposal_num_pre_nms_train=12000,
@@ -41,8 +41,8 @@ class Vgg16FasterRcnn(BaseFasterRcnn):
                  rpn_training_max_pos_samples=128,
 
                  # roi head & proposal target 参数
-                 roi_proposal_means=[0, 0, 0, 0],
-                 roi_proposal_stds=[1.0, 1.0, 1.0, 1.0],
+                 roi_proposal_means=(0, 0, 0, 0),
+                 roi_proposal_stds=(0.1, 0.1, 0.2, 0.2),
 
                  # roi pooling 参数
                  roi_pool_size=7,
@@ -100,9 +100,6 @@ class Vgg16FasterRcnn(BaseFasterRcnn):
                          prediction_nms_iou_threshold=prediction_nms_iou_threshold,
                          prediction_score_threshold=prediction_score_threshold,
                          )
-
-    def _get_rpn_head(self):
-        return Vgg16RpnHead(self.num_anchors, weight_decay=self.weight_decay)
 
     def _get_roi_head(self):
         return Vgg16RoiHead(self.num_classes,
@@ -172,52 +169,9 @@ class Vgg16FasterRcnn(BaseFasterRcnn):
             tf.logging.info('successfully loaded weights for {}'.format(roi_head_dict[slim_tensor_name_pre]))
 
 
-class Vgg16RpnHead(tf.keras.Model):
-    def __init__(self, num_anchors, weight_decay=0.0005):
-        """
-        :param num_anchors:
-        """
-        super().__init__()
-        self._num_anchors = num_anchors
-        self._rpn_conv = layers.Conv2D(512, [3, 3],
-                                       padding='same', name='rpn_first_conv', activation='relu',
-                                       kernel_initializer=tf.random_normal_initializer(0, 0.01),
-                                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )
-
-        self._rpn_score_conv = layers.Conv2D(num_anchors * 2, [1, 1],
-                                             padding='valid', name='rpn_score_conv',
-                                             activation=None,
-                                             kernel_initializer=tf.random_normal_initializer(0, 0.01),
-                                             kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
-
-        self._rpn_bbox_conv = layers.Conv2D(num_anchors * 4, [1, 1],
-                                            padding='valid', name='rpn_bbox_conv',
-                                            activation=None,
-                                            kernel_initializer=tf.random_normal_initializer(0, 0.01),
-                                            kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
-
-    def call(self, inputs, training=None, mask=None):
-        """
-        参与训练，不能使用numpy操作
-        :param inputs:
-        :param training:
-        :param mask:
-        :return:
-        """
-        x = self._rpn_conv(inputs)
-
-        rpn_score = self._rpn_score_conv(x)
-        rpn_score_reshape = tf.reshape(rpn_score, [-1, self._num_anchors * 2])
-
-        rpn_bbox = self._rpn_bbox_conv(x)
-        rpn_bbox_reshape = tf.reshape(rpn_bbox, [-1, 4])
-
-        return rpn_score_reshape, rpn_bbox_reshape
-
-
 class Vgg16RoiHead(tf.keras.Model):
     def __init__(self, num_classes,
-                 roi_feature_size=7 * 7 * 512,
+                 roi_feature_size=(7, 7, 512),
                  keep_rate=0.5, weight_decay=0.0005,
                  slim_ckpt_file_path=None, ):
         super().__init__()
@@ -242,8 +196,9 @@ class Vgg16RoiHead(tf.keras.Model):
         self._roi_bboxes_layer = layers.Dense(4 * num_classes, name='roi_head_bboxes', activation=None,
                                               kernel_initializer=tf.random_normal_initializer(0, 0.001),
                                               kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        self._flatten_layer = layers.Flatten()
 
-        self.build((None, roi_feature_size))
+        self.build((None, *roi_feature_size))
 
         if slim_ckpt_file_path is None:
             self._load_keras_weights()
@@ -280,12 +235,13 @@ class Vgg16RoiHead(tf.keras.Model):
         """
         输入 roi pooling 的结果
         对每个 roi pooling 的结果进行预测（预测bboxes）
-        :param inputs:  roi_features, [num_rois, len_roi_feature]
+        :param inputs:  roi_features, [num_rois, pool_size, pool_size, num_channels]
         :param training:
         :param mask:
         :return:
         """
-        x = self._fc1(inputs)
+        x = self._flatten_layer(inputs)
+        x = self._fc1(x)
         x = self._dropout1(x, training)
         x = self._fc2(x)
         x = self._dropout2(x, training)

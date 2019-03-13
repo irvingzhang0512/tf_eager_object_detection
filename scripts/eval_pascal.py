@@ -3,19 +3,14 @@ import numpy as np
 import os
 import sys
 import argparse
+from object_detection.model.faster_rcnn.vgg16_faster_rcnn import Vgg16FasterRcnn
+from object_detection.model.faster_rcnn.resnet_faster_rcnn import ResNetFasterRcnn
 from object_detection.evaluation.pascal_eval_files_utils import get_prediction_files
 from object_detection.evaluation.detectron_pascal_evaluation_utils import voc_eval
-from object_detection.model.faster_rcnn.vgg16_faster_rcnn import Vgg16FasterRcnn
 from object_detection.config.faster_rcnn_config import PASCAL_CONFIG as CONFIG
 from tensorflow.contrib.eager.python import saver as eager_saver
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
-config = tf.ConfigProto(allow_soft_placement=True)
-config.gpu_options.allow_growth = True
-tf.enable_eager_execution(config=config)
-tf.logging.set_verbosity(tf.logging.INFO)
 
 num_classes = 21,
 class_list = ('__background__',  # always index 0
@@ -101,8 +96,11 @@ def eval_by_local_files_and_gt_xmls(root_path,
     tf.logging.info('map {}'.format(all_ap / (len(class_list) - 1)))
 
 
-def _get_default_vgg16_model():
-    return Vgg16FasterRcnn(
+def _get_default_resnet_model(depth=50):
+    return ResNetFasterRcnn(
+        depth=depth,
+        roi_feature_size=CONFIG['resnet_roi_feature_size'],
+
         num_classes=CONFIG['num_classes'],
         weight_decay=CONFIG['weight_decay'],
 
@@ -129,8 +127,50 @@ def _get_default_vgg16_model():
         roi_proposal_stds=CONFIG['roi_proposal_stds'],
 
         roi_pool_size=CONFIG['roi_pooling_size'],
+
+        roi_sigma=CONFIG['roi_sigma'],
+        roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
+        roi_training_neg_iou_threshold=CONFIG['roi_neg_iou_threshold'],
+        roi_training_total_num_samples=CONFIG['roi_total_sample_number'],
+        roi_training_max_pos_samples=CONFIG['roi_pos_sample_max_number'],
+
+        prediction_max_objects_per_image=CONFIG['max_objects_per_image'],
+        prediction_max_objects_per_class=CONFIG['max_objects_per_class_per_image'],
+        prediction_nms_iou_threshold=CONFIG['predictions_nms_iou_threshold'],
+        prediction_score_threshold=CONFIG['prediction_score_threshold'],
+    )
+
+
+def _get_default_vgg16_model():
+    return Vgg16FasterRcnn(
+        num_classes=CONFIG['num_classes'],
+        weight_decay=CONFIG['weight_decay'],
+        roi_feature_size=CONFIG['vgg16_roi_feature_size'],
+
+        ratios=CONFIG['ratios'],
+        scales=CONFIG['scales'],
+        extractor_stride=CONFIG['extractor_stride'],
+
+        rpn_proposal_means=CONFIG['rpn_proposal_means'],
+        rpn_proposal_stds=CONFIG['rpn_proposal_stds'],
+
+        rpn_proposal_num_pre_nms_train=CONFIG['rpn_proposal_train_pre_nms_sample_number'],
+        rpn_proposal_num_post_nms_train=CONFIG['rpn_proposal_train_after_nms_sample_number'],
+        rpn_proposal_num_pre_nms_test=CONFIG['rpn_proposal_test_pre_nms_sample_number'],
+        rpn_proposal_num_post_nms_test=CONFIG['rpn_proposal_test_after_nms_sample_number'],
+        rpn_proposal_nms_iou_threshold=CONFIG['rpn_proposal_nms_iou_threshold'],
+
+        rpn_sigma=CONFIG['rpn_sigma'],
+        rpn_training_pos_iou_threshold=CONFIG['rpn_pos_iou_threshold'],
+        rpn_training_neg_iou_threshold=CONFIG['rpn_neg_iou_threshold'],
+        rpn_training_total_num_samples=CONFIG['rpn_total_sample_number'],
+        rpn_training_max_pos_samples=CONFIG['rpn_pos_sample_max_number'],
+
+        roi_proposal_means=CONFIG['roi_proposal_means'],
+        roi_proposal_stds=CONFIG['roi_proposal_stds'],
+
+        roi_pool_size=CONFIG['roi_pooling_size'],
         roi_head_keep_dropout_rate=CONFIG['roi_head_keep_dropout_rate'],
-        roi_feature_size=CONFIG['roi_feature_size'],
 
         roi_sigma=CONFIG['roi_sigma'],
         roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
@@ -172,12 +212,12 @@ def parse_args():
   """
     parser = argparse.ArgumentParser(description='Evaluate a Fast R-CNN model')
     parser.add_argument('ckpt_file_path', type=str, help='target ckpt file path', )
+    parser.add_argument('--gpu_id', type=str, default='0')
+    parser.add_argument('--model', type=str, default='vgg16', help='one of [vgg16, resnet50, resnet101]')
     parser.add_argument('--use_tf_faster_rcnn_model', default=False, type=bool)
     parser.add_argument('--use_local_result_files', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
                         default='cv2', type=str)
-    parser.add_argument('--preprocessing_type', help='caffe or tf',
-                        default='caffe', type=str)
     #     parser.add_argument('--root_path', help='path to pascal voc 2007',
     #                         default='D:\\data\\VOCdevkit\\VOC2007', type=str)
     #     parser.add_argument('--result_file_format', help='local detection result file pattern',
@@ -208,13 +248,33 @@ def main(args):
                                         )
         return
 
-    cur_model = _get_default_vgg16_model()
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
+    tf.enable_eager_execution(config=config)
+    tf.logging.set_verbosity(tf.logging.INFO)
+
+    if args.model == 'vgg16':
+        cur_model = _get_default_vgg16_model()
+        preprocessing_type = 'caffe'
+    elif args.model == 'resnet50':
+        cur_model = _get_default_resnet_model(50)
+        preprocessing_type = 'caffe'
+    elif args.model == 'resnet101':
+        cur_model = _get_default_resnet_model(101)
+        preprocessing_type = 'caffe'
+    elif args.model == 'resnet152':
+        cur_model = _get_default_resnet_model(152)
+        preprocessing_type = 'caffe'
+    else:
+        raise ValueError('unknown model {}'.format(args.model))
+
     if args.use_tf_faster_rcnn_model:
         cur_model = _get_tf_faster_rcnn_pre_trained_model(cur_model, args.ckpt_file_path)
     else:
         _load_from_ckpt_file(cur_model, args.ckpt_file_path)
     eval_from_scratch(cur_model,
-                      preprocessing_type=args.preprocessing_type,
+                      preprocessing_type=preprocessing_type,
                       dataset_type=args.dataset_type,
                       root_path=args.root_path,
                       result_file_format=args.result_file_format,

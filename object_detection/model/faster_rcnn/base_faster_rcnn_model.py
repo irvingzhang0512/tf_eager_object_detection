@@ -62,10 +62,10 @@ class BaseFasterRcnn(tf.keras.Model):
         super().__init__()
         self.num_classes = num_classes
         self.weight_decay = weight_decay
-        self.num_anchors = len(ratios) * len(scales)
 
         self._ratios = ratios
         self._scales = scales
+        self._num_anchors = len(ratios) * len(scales)
         self._extractor_stride = extractor_stride
         self._rpn_sigma = rpn_sigma
         self._roi_sigma = roi_sigma
@@ -80,8 +80,9 @@ class BaseFasterRcnn(tf.keras.Model):
 
         self._anchor_generator = generate_by_anchor_base_tf
         self._anchor_base = tf.to_float(generate_anchor_base(extractor_stride, ratios, scales))
+        self._rpn_head = RpnHead(num_anchors=self._num_anchors, weight_decay=weight_decay)
         self._rpn_proposal = RegionProposal(
-            num_anchors=self.num_anchors,
+            num_anchors=self._num_anchors,
             num_pre_nms_train=rpn_proposal_num_pre_nms_train,
             num_post_nms_train=rpn_proposal_num_post_nms_train,
             num_pre_nms_test=rpn_proposal_num_pre_nms_test,
@@ -108,11 +109,7 @@ class BaseFasterRcnn(tf.keras.Model):
             target_stds=roi_proposal_stds)
 
         self._extractor = self._get_extractor()
-        self._rpn_head = self._get_rpn_head()
         self._roi_head = self._get_roi_head()
-
-    def _get_rpn_head(self):
-        raise NotImplementedError
 
     def _get_roi_head(self):
         raise NotImplementedError
@@ -149,7 +146,7 @@ class BaseFasterRcnn(tf.keras.Model):
             rpn_labels, rpn_bbox_targets, rpn_in_weights, rpn_out_weights = self._anchor_target((gt_bboxes,
                                                                                                  image_shape,
                                                                                                  anchors,
-                                                                                                 self.num_anchors),
+                                                                                                 self._num_anchors),
                                                                                                 True)
             rpn_cls_loss, rpn_reg_loss = self._get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
                                                             rpn_labels, rpn_bbox_targets,
@@ -192,7 +189,7 @@ class BaseFasterRcnn(tf.keras.Model):
     def _get_rpn_loss(self, rpn_score, rpn_bbox_txtytwth,
                       anchor_target_labels, anchor_target_bboxes_txtytwth,
                       anchor_target_in_weights, anchor_target_out_weights):
-        rpn_score = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self.num_anchors]), (0, 2, 1)), [-1, 2])
+        rpn_score = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self._num_anchors]), (0, 2, 1)), [-1, 2])
         rpn_selected = tf.where(anchor_target_labels >= 0)[:, 0]
         rpn_score_selected = tf.gather(rpn_score, rpn_selected)
         rpn_labels_selected = tf.gather(anchor_target_labels, rpn_selected)
@@ -295,3 +292,47 @@ class BaseFasterRcnn(tf.keras.Model):
         rois = rois / tf.to_float(img_scale)
 
         return roi_score_softmax, roi_bboxes_txtytwth, rois
+
+
+class RpnHead(tf.keras.Model):
+    def __init__(self, num_anchors, weight_decay=0.0001):
+        """
+        :param num_anchors:
+        """
+        super().__init__()
+        self._name = 'rpn_head'
+        self._num_anchors = num_anchors
+        self._rpn_conv = layers.Conv2D(512, [3, 3],
+                                       padding='same', name='rpn_first_conv', activation='relu',
+                                       kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )
+
+        self._rpn_score_conv = layers.Conv2D(num_anchors * 2, [1, 1],
+                                             padding='valid', name='rpn_score_conv',
+                                             activation=None,
+                                             kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                                             kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+
+        self._rpn_bbox_conv = layers.Conv2D(num_anchors * 4, [1, 1],
+                                            padding='valid', name='rpn_bbox_conv',
+                                            activation=None,
+                                            kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                                            kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                            )
+
+    def call(self, inputs, training=None, mask=None):
+        """
+        :param inputs:
+        :param training:
+        :param mask:
+        :return:
+        """
+        x = self._rpn_conv(inputs)
+
+        rpn_score = self._rpn_score_conv(x)
+        rpn_score_reshape = tf.reshape(rpn_score, [-1, self._num_anchors * 2])
+
+        rpn_bbox = self._rpn_bbox_conv(x)
+        rpn_bbox_reshape = tf.reshape(rpn_bbox, [-1, 4])
+
+        return rpn_score_reshape, rpn_bbox_reshape

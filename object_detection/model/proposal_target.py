@@ -55,9 +55,9 @@ class ProposalTarget(tf.keras.Model):
 
         # 根据条件获取 前景 背景
         fg_inds = tf.where(max_overlaps >= self._pos_iou_threshold)[:, 0]
-        bg_inds = tf.where(tf.logical_and(max_overlaps < self._pos_iou_threshold,
-                                          max_overlaps >= self._neg_iou_threshold))[:, 0]
-        # bg_inds = tf.where(max_overlaps < self._pos_iou_threshold)[:, 0]
+        # bg_inds = tf.where(tf.logical_and(max_overlaps < self._pos_iou_threshold,
+        #                                   max_overlaps >= self._neg_iou_threshold))[:, 0]
+        bg_inds = tf.where(max_overlaps < self._pos_iou_threshold)[:, 0]
 
         # 筛选 前景/背景
         if tf.size(fg_inds) > self._max_pos_samples:
