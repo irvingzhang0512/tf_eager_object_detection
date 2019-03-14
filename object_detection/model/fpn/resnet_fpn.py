@@ -120,12 +120,9 @@ def get_resnet_model(stack_fn,
     x = layers.MaxPooling2D(3, strides=2, name='pool1_pool')(x)
 
     c2, c3, c4, c5 = stack_fn(x)
-    print(c2.shape, c3.shape, c4.shape, c5.shape)
 
     p5 = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=use_bias, name='build_p5')(c5)
-    print(p5.shape)
     p6 = layers.MaxPooling2D(name='build_p6')(p5)
-    print(p6.shape)
     p4 = get_fusion_layer(c4, p5, name='build_p4', use_bias=use_bias, top_down_dims=top_down_dims)
     p3 = get_fusion_layer(c3, p4, name='build_p3', use_bias=use_bias, top_down_dims=top_down_dims)
     p2 = get_fusion_layer(c2, p3, name='build_p2', use_bias=use_bias, top_down_dims=top_down_dims)

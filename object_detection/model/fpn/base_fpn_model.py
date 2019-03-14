@@ -65,7 +65,7 @@ class BaseFPN(tf.keras.Model):
                  prediction_max_objects_per_image=50,
                  prediction_max_objects_per_class=50,
                  prediction_nms_iou_threshold=0.3,
-                 prediction_score_threshold=0.3,
+                 prediction_score_threshold=0.,
                  ):
         super().__init__()
         # 当(extractor & roi head)以及(rpn head, region proposal, anchor target, proposal target)同时用到某参数时
@@ -174,7 +174,7 @@ class BaseFPN(tf.keras.Model):
         for idx in range(len(self._level_name_list)):
             level_name = self._level_name_list[idx]
             extractor_stride = self._anchor_stride_list[idx]
-            anchor_base = self._anchor_bases[idx]
+            anchor_base = self._anchor_base_list[idx]
 
             cur_anchors = self._anchor_generator(anchor_base, extractor_stride,
                                                  tf.to_int32(image_shape[0] / extractor_stride),

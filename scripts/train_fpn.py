@@ -280,7 +280,7 @@ def train(training_dataset, base_model, optimizer, loss_type,
           ):
     # 重大bug……
     # 如果没有进行这步操作，keras模型中rpn head的参数并没有初始化，不存在于后续 base_model.variables 中
-    base_model(tf.to_float(np.random.rand(1, 1024, 1024, 3), False))
+    base_model(tf.to_float(np.random.rand(1, 1024, 1024, 3)), False)
 
     # 获取 pretrained model
     saver = eager_saver.Saver(base_model.variables)

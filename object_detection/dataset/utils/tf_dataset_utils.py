@@ -113,7 +113,9 @@ def preprocessing_func(image, bboxes, height, width, labels,
     scale2 = max_size / tf.maximum(height, width)
     scale = tf.minimum(scale1, scale2)
     n_height = tf.to_int32(scale * height)
+    n_height = n_height + (32 - tf.mod(n_height, 32))
     n_width = tf.to_int32(scale * width)
+    n_width = n_width + (32 - tf.mod(n_width, 32))
     image = tf.image.resize_bilinear(image, (n_height, n_width))
 
     channels = tf.split(axis=-1, num_or_size_splits=4, value=bboxes)
