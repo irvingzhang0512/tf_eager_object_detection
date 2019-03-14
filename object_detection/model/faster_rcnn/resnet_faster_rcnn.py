@@ -1,5 +1,6 @@
 import tensorflow as tf
 from object_detection.model.faster_rcnn.base_faster_rcnn_model import BaseFasterRcnn
+import numpy as np
 
 layers = tf.keras.layers
 
@@ -97,32 +98,23 @@ def stack1(x, filters, blocks, stride1=2, name=None, trainable=True, weight_deca
 
 
 def get_resnet_model(stack_fn,
-                     preact,
                      use_bias,
                      model_name='resnet',
                      ):
     img_input = layers.Input(shape=(None, None, 3))
-    bn_axis = 3
 
     x = layers.ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
-    x = layers.Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv', trainable=False)(x)
+    x = layers.Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv', trainable=False, padding='valid')(x)
 
-    if preact is False:
-        x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                      name='conv1_bn')(x)
-        x = layers.Activation('relu', name='conv1_relu')(x)
+    x = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
+                                  name='conv1_bn')(x)
+    x = layers.Activation('relu', name='conv1_relu')(x)
 
     x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
     x = layers.MaxPooling2D(3, strides=2, name='pool1_pool')(x)
 
     x = stack_fn(x)
 
-    if preact is True:
-        x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                      name='post_bn')(x)
-        x = layers.Activation('relu', name='post_relu')(x)
-
-    # Create model.
     model = tf.keras.Model(img_input, x, name=model_name)
 
     # Load weights.
@@ -161,7 +153,7 @@ def get_resnet_v1_extractor(depth, weight_decay):
     else:
         raise ValueError('unknown depth {}'.format(depth))
 
-    return get_resnet_model(stack_fn, False, False, 'resnet{}'.format(depth))
+    return get_resnet_model(stack_fn, True, 'resnet{}'.format(depth))
 
 
 def get_resnet_v1_roi_head(depth, roi_feature_size, num_classes, weight_decay=.0):
@@ -296,24 +288,67 @@ class ResNetFasterRcnn(BaseFasterRcnn):
     def _get_extractor(self):
         return get_resnet_v1_extractor(depth=self._depth, weight_decay=self.weight_decay)
 
-    def load_tf_faster_rcnn_resnet101_model(self, ckpt_file_path):
+    def load_tf_faster_rcnn_tf_weights(self, ckpt_file_path):
         reader = tf.train.load_checkpoint(ckpt_file_path)
 
         extractor = self.get_layer('resnet101')
         extractor_dict = {
-            "resnet_v1_101/conv1//": "conv1_conv",
+            "resnet_v1_101/conv1/": "conv1_conv",
             "resnet_v1_101/conv1/BatchNorm/": "conv1_bn",
         }
-        # conv2_block1_0/1/2/3_conv/bn
-        # conv2_block2/3_1/2/3_conv/bn
-        # conv3_block1_0/1/2/3_conv/bn
-        # conv3_block2/3/4_1/2/3_conv/bn
-        # conv4_block1_0/1/2/3_conv/bn
-        # conv4_block2/3_1-23_conv/bn
+
+        keras_format = '{}_{}_{}_{}' # conv5_block1_0_bn
+        ckpt_format = 'resnet_v1_101/{}/{}/bottleneck_v1/{}/{}' # resnet_v1_101/block3/unit_1/bottleneck_v1/conv3/
+
+        # block1 - unit_1 - shortcut
+        # conv2 - block1 - 0
+        extractor_dict[ckpt_format.format('block1', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv2', 'block1', 0, 'bn')
+        extractor_dict[ckpt_format.format('block1', 'unit_1', 'shortcut', '')] = keras_format.format('conv2', 'block1', 0, 'conv')
+        # block1 - unit_1-3 - conv1-3
+        # conv2 - block1-3 - 1-3
+        for i in range(1, 4):
+            for j in range(1, 4):
+                key = ckpt_format.format('block1', 'unit_%d' % i, 'conv%d' % j, '')
+                value = keras_format.format('conv2', 'block%d' % i, j, 'conv')
+                extractor_dict[key] = value
+                key = ckpt_format.format('block1', 'unit_%d' % i, 'conv%d' % j, 'BatchNorm/')
+                value = keras_format.format('conv2', 'block%d' % i, j, 'bn')
+                extractor_dict[key] = value
+
+        # block2 - unit_1 - shortcut
+        # conv3 block1 0
+        extractor_dict[ckpt_format.format('block2', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv3', 'block1', 0, 'bn')
+        extractor_dict[ckpt_format.format('block2', 'unit_1', 'shortcut', '')] = keras_format.format('conv3', 'block1', 0, 'conv')
+        # block2 unit_1-4 conv1-3
+        # conv3 block1-4 1-3
+        for i in range(1, 5):
+            for j in range(1, 4):
+                key = ckpt_format.format('block2', 'unit_%d' % i, 'conv%d' % j, '')
+                value = keras_format.format('conv3', 'block%d' % i, j, 'conv')
+                extractor_dict[key] = value
+                key = ckpt_format.format('block2', 'unit_%d' % i, 'conv%d' % j, 'BatchNorm/')
+                value = keras_format.format('conv3', 'block%d' % i, j, 'bn')
+                extractor_dict[key] = value
+
+        # block3 - unit_1 - shortcut
+        # conv4 block1 0
+        extractor_dict[ckpt_format.format('block3', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv4', 'block1', 0, 'bn')
+        extractor_dict[ckpt_format.format('block3', 'unit_1', 'shortcut', '')] = keras_format.format('conv4', 'block1', 0, 'conv')
+        # block3 unit_1-23 conv1-3
+        # conv4 block1-23 1-3
+        for i in range(1, 24):
+            for j in range(1, 4):
+                key = ckpt_format.format('block3', 'unit_%d' % i, 'conv%d' % j, '')
+                value = keras_format.format('conv4', 'block%d' % i, j, 'conv')
+                extractor_dict[key] = value
+                key = ckpt_format.format('block3', 'unit_%d' % i, 'conv%d' % j, 'BatchNorm/')
+                value = keras_format.format('conv4', 'block%d' % i, j, 'bn')
+                extractor_dict[key] = value
+
         for tf_faster_rcnn_name_pre in extractor_dict.keys():
             if 'BatchNorm' in tf_faster_rcnn_name_pre:
                 cur_weights = [
-                    reader.get_tensor(tf_faster_rcnn_name_pre + 'gama'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'gamma'),
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'beta'),
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_mean'),
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_variance'),
@@ -321,6 +356,7 @@ class ResNetFasterRcnn(BaseFasterRcnn):
             else:
                 cur_weights = [
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                    np.zeros(extractor.get_layer(name=extractor_dict[tf_faster_rcnn_name_pre]).variables[-1].shape)
                 ]
             extractor.get_layer(name=extractor_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
             tf.logging.info('successfully loaded weights for {}'.format(extractor_dict[tf_faster_rcnn_name_pre]))
@@ -369,7 +405,7 @@ class ResNetFasterRcnn(BaseFasterRcnn):
         for tf_faster_rcnn_name_pre in roi_head_dict.keys():
             if 'BatchNorm' in tf_faster_rcnn_name_pre:
                 cur_weights = [
-                    reader.get_tensor(tf_faster_rcnn_name_pre + 'gama'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'gamma'),
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'beta'),
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_mean'),
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_variance'),
@@ -377,6 +413,7 @@ class ResNetFasterRcnn(BaseFasterRcnn):
             elif 'block' in tf_faster_rcnn_name_pre:
                 cur_weights = [
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                    np.zeros(roi_head.get_layer(name=roi_head_dict[tf_faster_rcnn_name_pre]).variables[-1].shape)
                 ]
             else:
                 cur_weights = [

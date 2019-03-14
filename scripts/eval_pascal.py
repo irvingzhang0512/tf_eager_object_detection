@@ -217,19 +217,19 @@ def parse_args():
     parser.add_argument('--use_local_result_files', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
                         default='cv2', type=str)
-    #     parser.add_argument('--root_path', help='path to pascal voc 2007',
-    #                         default='D:\\data\\VOCdevkit\\VOC2007', type=str)
-    #     parser.add_argument('--result_file_format', help='local detection result file pattern',
-    #                         default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
-    #     parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-    #                         default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
-
     parser.add_argument('--root_path', help='path to pascal voc 2007',
-                        default='/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/VOC2007', type=str)
+                        default='D:\\data\\VOCdevkit\\VOC2007', type=str)
     parser.add_argument('--result_file_format', help='local detection result file pattern',
-                        default='/ssd/zhangyiyang/tf_eager_object_detection/results/{:s}.txt', type=str)
+                        default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
     parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-                        default='/ssd/zhangyiyang/tf_eager_object_detection/results', type=str)
+                        default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
+
+    # parser.add_argument('--root_path', help='path to pascal voc 2007',
+    #                     default='/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/VOC2007', type=str)
+    # parser.add_argument('--result_file_format', help='local detection result file pattern',
+    #                     default='/ssd/zhangyiyang/tf_eager_object_detection/results/{:s}.txt', type=str)
+    # parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
+    #                     default='/ssd/zhangyiyang/tf_eager_object_detection/results', type=str)
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -244,6 +244,8 @@ def main(args):
         eval_by_local_files_and_gt_xmls(root_path=args.root_path,
                                         result_file_format=args.result_file_format,
                                         cache_dir=args.annotation_cache_dir,
+                                        mode='test',
+                                        prediction_iou_threshold=CONFIG['evaluate_iou_threshold']
                                         )
         return
 

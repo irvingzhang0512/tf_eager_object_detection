@@ -34,15 +34,20 @@ class RoiPoolingCropAndResize(tf.keras.Model):
             roi_channels[3] / tf.to_float(h - 1),
             roi_channels[2] / tf.to_float(w - 1),
         ], axis=1)
-        pre_pool_size = self._pool_size * 2
-
-        # 重大bug…… shared_layers 还是需要参与反向传播的……，bboxes不参加
-        crops = tf.image.crop_and_resize(shared_layers,
-                                         tf.stop_gradient(bboxes),
-                                         box_ind=tf.to_int32(batch_ids),
-                                         crop_size=[pre_pool_size, pre_pool_size],
-                                         name="crops")
-        return self._max_pool(crops)
+        # pre_pool_size = self._pool_size * 2
+        #
+        # # 重大bug…… shared_layers 还是需要参与反向传播的……，bboxes不参加
+        # crops = tf.image.crop_and_resize(shared_layers,
+        #                                  tf.stop_gradient(bboxes),
+        #                                  box_ind=tf.to_int32(batch_ids),
+        #                                  crop_size=[pre_pool_size, pre_pool_size],
+        #                                  name="crops")
+        # return self._max_pool(crops)
+        return tf.image.crop_and_resize(shared_layers,
+                                        tf.stop_gradient(bboxes),
+                                        box_ind=tf.to_int32(batch_ids),
+                                        crop_size=[self._pool_size, self._pool_size],
+                                        name="crops")
 
 
 def crop_and_resize(image, boxes, box_ind, crop_size, pad_border=True):
