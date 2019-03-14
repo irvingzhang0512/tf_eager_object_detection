@@ -147,7 +147,7 @@ class BaseFasterRcnn(tf.keras.Model):
                                                                                                  image_shape,
                                                                                                  anchors,
                                                                                                  self._num_anchors),
-                                                                                                True)
+                                                                                                training)
             rpn_cls_loss, rpn_reg_loss = self._get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
                                                             rpn_labels, rpn_bbox_targets,
                                                             rpn_in_weights, rpn_out_weights)
@@ -157,7 +157,7 @@ class BaseFasterRcnn(tf.keras.Model):
                                                                                                               gt_bboxes,
                                                                                                               gt_labels,
                                                                                                               ),
-                                                                                                             True)
+                                                                                                             training)
             # 训练时，只计算 proposal target 的 roi_features，一般只有128个
             roi_features = self._roi_pooling((shared_features, final_rois, self._extractor_stride),
                                              training=training)

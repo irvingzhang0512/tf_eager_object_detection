@@ -55,30 +55,33 @@ def eval_from_scratch(model,
     """
     # 生成检测结果的本地文件
     get_prediction_files(model,
+                         dataset_type=dataset_type,
                          preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
                          min_edge=CONFIG['image_min_size'], max_edge=CONFIG['image_max_size'],
-                         dataset_type=dataset_type,
                          data_root_path=root_path,
                          mode='test',
                          result_file_format=result_file_format,
                          score_threshold=prediction_score_threshold, iou_threshold=iou_threshold,
                          max_objects_per_class=max_objects_per_class, max_objects_per_image=max_objects_per_image,
                          target_means=target_means, target_stds=target_stds,
+                         min_size=10
                          )
 
     # 通过本地文件（包括检测结果和真实结果）计算map
     eval_by_local_files_and_gt_xmls(root_path,
                                     result_file_format,
                                     cache_dir,
+                                    'test',
                                     evaluation_iou_threshold)
 
 
 def eval_by_local_files_and_gt_xmls(root_path,
                                     result_file_format,
                                     cache_dir,
-                                    prediction_iou_threshold=CONFIG['evaluate_iou_threshold'], ):
+                                    mode,
+                                    prediction_iou_threshold):
     annotation_file_format = os.path.join(root_path, 'Annotations', "{}.xml")
-    imagesetfile = os.path.join(root_path, 'ImageSets', 'Main', 'test.txt')
+    imagesetfile = os.path.join(root_path, 'ImageSets', 'Main', '{}.txt'.format(mode))
     all_ap = .0
     for cls_name in class_list:
         if cls_name == '__background__':
@@ -188,15 +191,11 @@ def _get_default_vgg16_model():
 def _get_tf_faster_rcnn_pre_trained_model(model,
                                           ckpt_file_path='/home/tensorflow05/data/voc_2007_trainval/'
                                                          'vgg16_faster_rcnn_iter_70000.ckpt'):
-    model(tf.to_float(np.random.rand(1, 800, 600, 3)), False)
     model.load_tf_faster_rcnn_tf_weights(ckpt_file_path)
     return model
 
 
 def _load_from_ckpt_file(model, ckpt_file_path):
-    # 重大BUG，如果没有这一步操作，下一步的 model.variables 中就不包括 rpn_head 的内容
-    model(tf.to_float(np.random.rand(1, 800, 600, 3)), False)
-
     saver = eager_saver.Saver(model.variables)
     for var in model.variables:
         tf.logging.info('restore var {}'.format(var.name))
@@ -268,6 +267,9 @@ def main(args):
         preprocessing_type = 'caffe'
     else:
         raise ValueError('unknown model {}'.format(args.model))
+
+    # 重大BUG，如果没有这一步操作，下一步的 model.variables 中就不包括 rpn_head 的内容
+    cur_model(tf.to_float(np.random.rand(1, 800, 600, 3)), False)
 
     if args.use_tf_faster_rcnn_model:
         cur_model = _get_tf_faster_rcnn_pre_trained_model(cur_model, args.ckpt_file_path)

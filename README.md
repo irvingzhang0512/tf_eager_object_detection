@@ -65,6 +65,8 @@
 
 
 ## 3. training records
+
+### 3.1. VGG16-Faster-RCNN
 + load tf-faster-rcnn pre-trained model，mAP of pascal 2007 test set is 0.71。
 + end-to-end training：load slim pretrained model (`logs-pascal-slim`):
     + SGD，1e-3 -> 1e-4: after 14 epochs, mAP is 0.6935(or 0.6869).
@@ -75,6 +77,13 @@
     + Step 3: training rpn head only(rpn loss, 14 epochs, `logs-pascal-slim-rpn-only`), mAP is 0.6683.
     + Step 4: training roi head only(roi loss, 14 epochs, `logs-pascal-slim-roi-only`), mAP is 0.6733.
 
+### 3.2. ResNet-Faster-RCNN
++ resnet 50
+    + end-to-end training: load keras pre-trained model(`logs-pascal-resnet50-default`)。
+        + SGD：mAP 0.38, 0.43, 0.48, 0.506, 0.516
++ resnet 101
+    + end to end training: load keras pre-trained model(`logs-pascal-resnet101-default`):
+        + SGD: 14 epoch 0.58
 
 ## 4. 可有可无的教程……
 + training on pascal voc 2007 trainval set, evaluating on pascal voc 2007 test set.

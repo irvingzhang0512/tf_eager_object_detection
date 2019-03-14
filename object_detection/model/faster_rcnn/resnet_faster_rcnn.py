@@ -26,7 +26,8 @@ WEIGHTS_HASHES = {
 
 
 def block1(x, filters, kernel_size=3, stride=1,
-           conv_shortcut=True, name=None):
+           conv_shortcut=True, name=None,
+           trainable=True, weight_decay=0.0001):
     """A residual block.
 
     # Arguments
@@ -44,33 +45,37 @@ def block1(x, filters, kernel_size=3, stride=1,
     bn_axis = 3
     if conv_shortcut is True:
         shortcut = layers.Conv2D(4 * filters, 1, strides=stride,
-                                 name=name + '_0_conv')(x)
+                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                 name=name + '_0_conv', trainable=trainable)(x)
         shortcut = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                             name=name + '_0_bn')(shortcut)
+                                             name=name + '_0_bn', trainable=trainable)(shortcut)
     else:
         shortcut = x
 
-    x = layers.Conv2D(filters, 1, strides=stride, name=name + '_1_conv')(x)
+    x = layers.Conv2D(filters, 1, strides=stride, name=name + '_1_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_1_bn')(x)
+                                  name=name + '_1_bn', trainable=trainable)(x)
     x = layers.Activation('relu', name=name + '_1_relu')(x)
 
     x = layers.Conv2D(filters, kernel_size, padding='SAME',
-                      name=name + '_2_conv')(x)
+                      name=name + '_2_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_2_bn')(x)
+                                  name=name + '_2_bn', trainable=trainable)(x)
     x = layers.Activation('relu', name=name + '_2_relu')(x)
 
-    x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv')(x)
+    x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_3_bn')(x)
+                                  name=name + '_3_bn', trainable=trainable)(x)
 
     x = layers.Add(name=name + '_add')([shortcut, x])
     x = layers.Activation('relu', name=name + '_out')(x)
     return x
 
 
-def stack1(x, filters, blocks, stride1=2, name=None):
+def stack1(x, filters, blocks, stride1=2, name=None, trainable=True, weight_decay=0.0001):
     """A set of stacked residual blocks.
 
     # Arguments
@@ -83,9 +88,11 @@ def stack1(x, filters, blocks, stride1=2, name=None):
     # Returns
         Output tensor for the stacked blocks.
     """
-    x = block1(x, filters, stride=stride1, name=name + '_block1')
+    x = block1(x, filters, stride=stride1, name=name + '_block1',
+               trainable=trainable, weight_decay=weight_decay)
     for i in range(2, blocks + 1):
-        x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i))
+        x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i),
+                   trainable=trainable, weight_decay=weight_decay)
     return x
 
 
@@ -98,7 +105,7 @@ def get_resnet_model(stack_fn,
     bn_axis = 3
 
     x = layers.ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
-    x = layers.Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv')(x)
+    x = layers.Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv', trainable=False)(x)
 
     if preact is False:
         x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
@@ -132,29 +139,29 @@ def get_resnet_model(stack_fn,
     return model
 
 
-def get_resnet_v1_extractor(depth):
+def get_resnet_v1_extractor(depth, weight_decay):
     if depth == 50:
         def stack_fn(x):
-            x = stack1(x, 64, 3, stride1=1, name='conv2')
-            x = stack1(x, 128, 4, name='conv3')
-            x = stack1(x, 256, 6, name='conv4')
+            x = stack1(x, 64, 3, stride1=1, name='conv2', trainable=False, weight_decay=weight_decay)
+            x = stack1(x, 128, 4, name='conv3', weight_decay=weight_decay)
+            x = stack1(x, 256, 6, name='conv4', weight_decay=weight_decay)
             return x
     elif depth == 101:
         def stack_fn(x):
-            x = stack1(x, 64, 3, stride1=1, name='conv2')
-            x = stack1(x, 128, 4, name='conv3')
-            x = stack1(x, 256, 23, name='conv4')
+            x = stack1(x, 64, 3, stride1=1, name='conv2', trainable=False, weight_decay=weight_decay)
+            x = stack1(x, 128, 4, name='conv3', weight_decay=weight_decay)
+            x = stack1(x, 256, 23, name='conv4', weight_decay=weight_decay)
             return x
     elif depth == 152:
         def stack_fn(x):
-            x = stack1(x, 64, 3, stride1=1, name='conv2')
-            x = stack1(x, 128, 8, name='conv3')
-            x = stack1(x, 256, 36, name='conv4')
+            x = stack1(x, 64, 3, stride1=1, name='conv2', trainable=False, weight_decay=weight_decay)
+            x = stack1(x, 128, 8, name='conv3', weight_decay=weight_decay)
+            x = stack1(x, 256, 36, name='conv4', weight_decay=weight_decay)
             return x
     else:
         raise ValueError('unknown depth {}'.format(depth))
 
-    return get_resnet_model(stack_fn, False, True, 'resnet{}'.format(depth))
+    return get_resnet_model(stack_fn, False, False, 'resnet{}'.format(depth))
 
 
 def get_resnet_v1_roi_head(depth, roi_feature_size, num_classes, weight_decay=.0):
@@ -163,7 +170,7 @@ def get_resnet_v1_roi_head(depth, roi_feature_size, num_classes, weight_decay=.0
     model_name = 'resnet{}'.format(depth)
 
     features_input = layers.Input(roi_feature_size)
-    x = stack1(features_input, 512, 3, name='conv5')
+    x = stack1(features_input, 512, 3, name='conv5', weight_decay=weight_decay)
     x = layers.GlobalAveragePooling2D()(x)
     score = layers.Dense(num_classes, name='roi_head_score', activation=None,
                          kernel_initializer=tf.random_normal_initializer(0, 0.01),
@@ -287,4 +294,95 @@ class ResNetFasterRcnn(BaseFasterRcnn):
                                       weight_decay=self.weight_decay)
 
     def _get_extractor(self):
-        return get_resnet_v1_extractor(depth=self._depth)
+        return get_resnet_v1_extractor(depth=self._depth, weight_decay=self.weight_decay)
+
+    def load_tf_faster_rcnn_resnet101_model(self, ckpt_file_path):
+        reader = tf.train.load_checkpoint(ckpt_file_path)
+
+        extractor = self.get_layer('resnet101')
+        extractor_dict = {
+            "resnet_v1_101/conv1//": "conv1_conv",
+            "resnet_v1_101/conv1/BatchNorm/": "conv1_bn",
+        }
+        # conv2_block1_0/1/2/3_conv/bn
+        # conv2_block2/3_1/2/3_conv/bn
+        # conv3_block1_0/1/2/3_conv/bn
+        # conv3_block2/3/4_1/2/3_conv/bn
+        # conv4_block1_0/1/2/3_conv/bn
+        # conv4_block2/3_1-23_conv/bn
+        for tf_faster_rcnn_name_pre in extractor_dict.keys():
+            if 'BatchNorm' in tf_faster_rcnn_name_pre:
+                cur_weights = [
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'gama'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'beta'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_mean'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_variance'),
+                ]
+            else:
+                cur_weights = [
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                ]
+            extractor.get_layer(name=extractor_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
+            tf.logging.info('successfully loaded weights for {}'.format(extractor_dict[tf_faster_rcnn_name_pre]))
+
+        rpn_head = self.get_layer('rpn_head')
+        rpn_head_dict = {
+            "resnet_v1_101/rpn_conv/3x3/": "rpn_first_conv",
+            "resnet_v1_101/rpn_cls_score/": "rpn_score_conv",
+            "resnet_v1_101/rpn_bbox_pred/": "rpn_bbox_conv",
+        }
+        for tf_faster_rcnn_name_pre in rpn_head_dict.keys():
+            rpn_head.get_layer(name=rpn_head_dict[tf_faster_rcnn_name_pre]).set_weights([
+                reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                reader.get_tensor(tf_faster_rcnn_name_pre + 'biases'),
+            ])
+            tf.logging.info('successfully loaded weights for {}'.format(rpn_head_dict[tf_faster_rcnn_name_pre]))
+
+        roi_head = self.get_layer('resnet101_roi_head')
+        roi_head_dict = {
+            "resnet_v1_101/cls_score/": "roi_head_score",
+            "resnet_v1_101/bbox_pred/": "roi_head_bboxes",
+
+            "resnet_v1_101/block4/unit_1/bottleneck_v1/shortcut/": "conv5_block1_0_conv",
+            "resnet_v1_101/block4/unit_1/bottleneck_v1/shortcut/BatchNorm/": "conv5_block1_0_bn",
+            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv1/": "conv5_block1_1_conv",
+            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv1/BatchNorm/": "conv5_block1_1_bn",
+            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv2/": "conv5_block1_2_conv",
+            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv2/BatchNorm/": "conv5_block1_2_bn",
+            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv3/": "conv5_block1_3_conv",
+            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv3/BatchNorm/": "conv5_block1_3_bn",
+
+            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv1/": "conv5_block2_1_conv",
+            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv1/BatchNorm/": "conv5_block2_1_bn",
+            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv2/": "conv5_block2_2_conv",
+            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv2/BatchNorm/": "conv5_block2_2_bn",
+            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv3/": "conv5_block2_3_conv",
+            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv3/BatchNorm/": "conv5_block2_3_bn",
+
+            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv1/": "conv5_block3_1_conv",
+            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv1/BatchNorm/": "conv5_block3_1_bn",
+            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv2/": "conv5_block3_2_conv",
+            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv2/BatchNorm/": "conv5_block3_2_bn",
+            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv3/": "conv5_block3_3_conv",
+            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv3/BatchNorm/": "conv5_block3_3_bn",
+        }
+        for tf_faster_rcnn_name_pre in roi_head_dict.keys():
+            if 'BatchNorm' in tf_faster_rcnn_name_pre:
+                cur_weights = [
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'gama'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'beta'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_mean'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_variance'),
+                ]
+            elif 'block' in tf_faster_rcnn_name_pre:
+                cur_weights = [
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                ]
+            else:
+                cur_weights = [
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'biases'),
+                ]
+            roi_head.get_layer(name=roi_head_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
+            tf.logging.info('successfully loaded weights for {}'.format(roi_head_dict[tf_faster_rcnn_name_pre]))
+
