@@ -162,7 +162,7 @@ def get_resnet_v1_roi_head(depth, roi_feature_size, num_classes, weight_decay=.0
     model_name = 'resnet{}'.format(depth)
 
     features_input = layers.Input(roi_feature_size)
-    x = stack1(features_input, 512, 3, name='conv5', weight_decay=weight_decay)
+    x = stack1(features_input, 512, 3, stride1=1, name='conv5', weight_decay=weight_decay)
     x = layers.GlobalAveragePooling2D()(x)
     score = layers.Dense(num_classes, name='roi_head_score', activation=None,
                          kernel_initializer=tf.random_normal_initializer(0, 0.01),
@@ -422,4 +422,3 @@ class ResNetFasterRcnn(BaseFasterRcnn):
                 ]
             roi_head.get_layer(name=roi_head_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
             tf.logging.info('successfully loaded weights for {}'.format(roi_head_dict[tf_faster_rcnn_name_pre]))
-
