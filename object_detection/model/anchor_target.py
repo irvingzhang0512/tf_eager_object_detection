@@ -51,10 +51,10 @@ class AnchorTarget(tf.keras.Model):
         total_anchors = all_anchors.get_shape().as_list()[0]
 
         # 1. 对 anchors 进行过滤，筛选符合边界要求的 anchor，之后操作都基于筛选后的结果。
-        tf_logging.debug('rpn training, before filter has %d anchors' % all_anchors.shape[0])
+        tf_logging.debug('anchor target, before filter has %d anchors' % all_anchors.shape[0])
         selected_anchor_idx = bboxes_range_filter(all_anchors, image_shape[0], image_shape[1])
         anchors = tf.gather(all_anchors, selected_anchor_idx)
-        tf_logging.debug('rpn training, after filter has %d anchors' % anchors.shape[0])
+        tf_logging.debug('anchor target, after filter has %d anchors' % anchors.shape[0])
 
         # 准备工作
         labels = -tf.ones((anchors.shape[0],), tf.int32)

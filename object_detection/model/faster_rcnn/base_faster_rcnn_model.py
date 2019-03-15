@@ -5,7 +5,7 @@ from object_detection.model.anchor_target import AnchorTarget
 from object_detection.model.proposal_target import ProposalTarget
 from object_detection.model.roi_pooling import RoiPoolingCropAndResize
 from object_detection.model.losses import smooth_l1_loss, cls_loss
-from object_detection.utils.anchors import generate_by_anchor_base_tf, generate_anchor_base
+from object_detection.utils.anchor_generator import generate_by_anchor_base_tf, generate_anchor_base
 from object_detection.model.prediction import post_ops_prediction
 
 __all__ = ['BaseFasterRcnn']
@@ -138,7 +138,7 @@ class BaseFasterRcnn(tf.keras.Model):
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
 
         rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=training)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape),
                                   training=training)
 
         if training:
