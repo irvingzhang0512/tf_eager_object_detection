@@ -64,6 +64,10 @@ def generate_anchor_base(base_size=16, ratios=[0.5, 1, 2],
                          scales=2 ** np.arange(3, 6)):
     """
     有两种生成 anchor base 的方法，这种好像是原论文中使用的
+    anchor base 决定了最终 anchors 的长宽，后续 generate_by_anchor_base 函数的作用是确定anchor的中心点
+    输入的三个参数都会影响到最终的长宽：
+    ratios 确定了长宽的比例
+    base_size 和 scales 共同决定了 anchor 的具体尺寸，即 base_size * scales 就是最终 anchors 的尺寸
       Generate anchor (reference) windows by enumerating aspect ratios X
       scales wrt a reference (0, 0, 15, 15) window.
     """

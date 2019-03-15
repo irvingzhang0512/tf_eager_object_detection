@@ -26,7 +26,7 @@ WEIGHTS_HASHES = {
 
 
 def block1(x, filters, kernel_size=3, stride=1,
-           conv_shortcut=True, name=None):
+           conv_shortcut=True, name=None, weight_decay=0.0001):
     """A residual block.
 
     # Arguments
@@ -44,24 +44,28 @@ def block1(x, filters, kernel_size=3, stride=1,
     bn_axis = 3
     if conv_shortcut is True:
         shortcut = layers.Conv2D(4 * filters, 1, strides=stride,
+                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                  name=name + '_0_conv')(x)
         shortcut = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                              name=name + '_0_bn')(shortcut)
     else:
         shortcut = x
 
-    x = layers.Conv2D(filters, 1, strides=stride, name=name + '_1_conv')(x)
+    x = layers.Conv2D(filters, 1, strides=stride, name=name + '_1_conv',
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                   name=name + '_1_bn')(x)
     x = layers.Activation('relu', name=name + '_1_relu')(x)
 
     x = layers.Conv2D(filters, kernel_size, padding='SAME',
-                      name=name + '_2_conv')(x)
+                      name=name + '_2_conv',
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),)(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                   name=name + '_2_bn')(x)
     x = layers.Activation('relu', name=name + '_2_relu')(x)
 
-    x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv')(x)
+    x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv',
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                   name=name + '_3_bn')(x)
 
@@ -70,7 +74,7 @@ def block1(x, filters, kernel_size=3, stride=1,
     return x
 
 
-def stack1(x, filters, blocks, stride1=2, name=None):
+def stack1(x, filters, blocks, stride1=2, name=None, weight_decay=0.0001):
     """A set of stacked residual blocks.
 
     # Arguments
@@ -83,49 +87,53 @@ def stack1(x, filters, blocks, stride1=2, name=None):
     # Returns
         Output tensor for the stacked blocks.
     """
-    x = block1(x, filters, stride=stride1, name=name + '_block1')
+    x = block1(x, filters, stride=stride1, name=name + '_block1', weight_decay=weight_decay)
     for i in range(2, blocks + 1):
-        x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i))
+        x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i),  weight_decay=weight_decay)
     return x
 
 
-def get_fusion_layer(ci, pj, name, use_bias, top_down_dims):
+def get_fusion_layer(ci, pj, name, use_bias, top_down_dims, weight_decay=0.0001):
     upsample_pj = layers.UpSampling2D(size=(2, 2), name='{}_upsample'.format(name))(pj)
     reduce_dims_ci = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=use_bias,
-                                   name='{}_reduce_dims'.format(name))(ci)
+                                   name='{}_reduce_dims'.format(name),
+                                   kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(ci)
     fusion = layers.Add(name='{}_fusion'.format(name))([upsample_pj, reduce_dims_ci])
     final_output = layers.Conv2D(top_down_dims, 3, 1,
+                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                  padding='same', name=name)(fusion)
     return final_output
 
 
 def get_resnet_model(stack_fn,
-                     preact,
-                     use_bias,
                      model_name='resnet',
                      top_down_dims=256,
+                     weight_decay=0.0001,
                      ):
     img_input = layers.Input(shape=(None, None, 3))
     bn_axis = 3
 
     x = layers.ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
-    x = layers.Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv')(x)
+    x = layers.Conv2D(64, 7, strides=2, use_bias=True, name='conv1_conv',
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(x)
 
-    if preact is False:
-        x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                      name='conv1_bn')(x)
-        x = layers.Activation('relu', name='conv1_relu')(x)
+    x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name='conv1_bn')(x)
+    x = layers.Activation('relu', name='conv1_relu')(x)
 
     x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
     x = layers.MaxPooling2D(3, strides=2, name='pool1_pool')(x)
 
     c2, c3, c4, c5 = stack_fn(x)
 
-    p5 = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=use_bias, name='build_p5')(c5)
-    p6 = layers.MaxPooling2D(name='build_p6')(p5)
-    p4 = get_fusion_layer(c4, p5, name='build_p4', use_bias=use_bias, top_down_dims=top_down_dims)
-    p3 = get_fusion_layer(c3, p4, name='build_p3', use_bias=use_bias, top_down_dims=top_down_dims)
-    p2 = get_fusion_layer(c2, p3, name='build_p2', use_bias=use_bias, top_down_dims=top_down_dims)
+    p5 = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=True, name='build_p5',
+                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(c5)
+    p6 = layers.MaxPooling2D(strides=2, pool_size=(1, 1), name='build_p6')(p5)
+    p4 = get_fusion_layer(c4, p5, name='build_p4', use_bias=True, top_down_dims=top_down_dims,
+                          weight_decay=weight_decay)
+    p3 = get_fusion_layer(c3, p4, name='build_p3', use_bias=True, top_down_dims=top_down_dims,
+                          weight_decay=weight_decay)
+    p2 = get_fusion_layer(c2, p3, name='build_p2', use_bias=True, top_down_dims=top_down_dims,
+                          weight_decay=weight_decay)
 
     model = tf.keras.Model(img_input, [p2, p3, p4, p5, p6], name=model_name)
 
@@ -143,36 +151,34 @@ def get_resnet_model(stack_fn,
     return model
 
 
-def get_resnet_v1_extractor(depth):
+def get_resnet_v1_extractor(depth, weight_decay=0.0001):
     if depth == 50:
         def stack_fn(x):
-            c2 = stack1(x, 64, 3, stride1=1, name='conv2')
-            c3 = stack1(c2, 128, 4, name='conv3')
-            c4 = stack1(c3, 256, 6, name='conv4')
-            c5 = stack1(c4, 512, 3, name='conv5')
+            c2 = stack1(x, 64, 3, stride1=1, name='conv2', weight_decay=weight_decay)
+            c3 = stack1(c2, 128, 4, name='conv3', weight_decay=weight_decay)
+            c4 = stack1(c3, 256, 6, name='conv4', weight_decay=weight_decay)
+            c5 = stack1(c4, 512, 3, name='conv5', weight_decay=weight_decay)
             return c2, c3, c4, c5
     elif depth == 101:
         def stack_fn(x):
-            c2 = stack1(x, 64, 3, stride1=1, name='conv2')
-            c3 = stack1(c2, 128, 4, name='conv3')
-            c4 = stack1(c3, 256, 23, name='conv4')
-            c5 = stack1(c4, 512, 3, name='conv5')
+            c2 = stack1(x, 64, 3, stride1=1, name='conv2', weight_decay=weight_decay)
+            c3 = stack1(c2, 128, 4, name='conv3', weight_decay=weight_decay)
+            c4 = stack1(c3, 256, 23, name='conv4', weight_decay=weight_decay)
+            c5 = stack1(c4, 512, 3, name='conv5', weight_decay=weight_decay)
             return c2, c3, c4, c5
     elif depth == 152:
         def stack_fn(x):
-            c2 = stack1(x, 64, 3, stride1=1, name='conv2')
-            c3 = stack1(c2, 128, 8, name='conv3')
-            c4 = stack1(c3, 256, 36, name='conv4')
-            c5 = stack1(c4, 512, 3, name='conv5')
+            c2 = stack1(x, 64, 3, stride1=1, name='conv2', weight_decay=weight_decay)
+            c3 = stack1(c2, 128, 8, name='conv3', weight_decay=weight_decay)
+            c4 = stack1(c3, 256, 36, name='conv4', weight_decay=weight_decay)
+            c5 = stack1(c4, 512, 3, name='conv5', weight_decay=weight_decay)
             return c2, c3, c4, c5
     else:
         raise ValueError('unknown depth {}'.format(depth))
 
     return get_resnet_model(stack_fn,
-                            preact=False,
-                            use_bias=True,
                             model_name='resnet{}'.format(depth),
-                            top_down_dims=256)
+                            top_down_dims=256, weight_decay=weight_decay)
 
 
 class ResnetRoiHead(tf.keras.Model):
@@ -346,5 +352,4 @@ class ResnetV1Fpn(BaseFPN):
                              )
 
     def _get_extractor(self):
-        return get_resnet_v1_extractor(self._depth)
-
+        return get_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)

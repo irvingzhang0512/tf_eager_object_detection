@@ -57,15 +57,13 @@ class RegionProposal(tf.keras.Model):
 
         # 1. 使用anchors使用rpn_pred修正，获取所有预测结果。
         # [num_anchors*feature_width*feature_height, 4]
-        tf_logging.debug(('rpn head txtytwth max & min',
-                          tf.reduce_max(bboxes_txtytwth),
-                          tf.reduce_min(bboxes_txtytwth)))
         decoded_bboxes = decode_bbox_with_mean_and_std(anchors, bboxes_txtytwth,
                                                        self._target_means, self._target_stds)
 
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, _ = bboxes_clip_filter(decoded_bboxes, 0, image_shape[0], image_shape[1])
 
+        # 这里这么复杂，主要是与tf-faster-rcnn对应……
         scores = tf.reshape(tf.transpose(tf.reshape(scores, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
         scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
         scores = tf.reshape(scores, [-1, 2 * self._num_anchors])
