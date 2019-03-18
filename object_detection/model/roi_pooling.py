@@ -6,9 +6,10 @@ __all__ = ['RoiPoolingCropAndResize', 'RoiPoolingRoiAlign']
 
 
 class RoiPoolingCropAndResize(tf.keras.Model):
-    def __init__(self, pool_size):
+    def __init__(self, pool_size, max_pooling_flag=True):
         super().__init__()
         self._pool_size = pool_size
+        self._max_pooling_flag = max_pooling_flag
         self._concat_layer = layers.Concatenate(axis=0)
         self._max_pool = layers.MaxPooling2D(padding='same')
 
@@ -34,20 +35,22 @@ class RoiPoolingCropAndResize(tf.keras.Model):
             roi_channels[3] / tf.to_float(h - 1),
             roi_channels[2] / tf.to_float(w - 1),
         ], axis=1)
-        # pre_pool_size = self._pool_size * 2
-        #
-        # # 重大bug…… shared_layers 还是需要参与反向传播的……，bboxes不参加
-        # crops = tf.image.crop_and_resize(shared_layers,
-        #                                  tf.stop_gradient(bboxes),
-        #                                  box_ind=tf.to_int32(batch_ids),
-        #                                  crop_size=[pre_pool_size, pre_pool_size],
-        #                                  name="crops")
-        # return self._max_pool(crops)
-        return tf.image.crop_and_resize(shared_layers,
-                                        tf.stop_gradient(bboxes),
-                                        box_ind=tf.to_int32(batch_ids),
-                                        crop_size=[self._pool_size, self._pool_size],
-                                        name="crops")
+        if self._max_pooling_flag:
+            pre_pool_size = self._pool_size * 2
+
+            # 重大bug…… shared_layers 还是需要参与反向传播的……，bboxes不参加
+            crops = tf.image.crop_and_resize(shared_layers,
+                                             tf.stop_gradient(bboxes),
+                                             box_ind=tf.to_int32(batch_ids),
+                                             crop_size=[pre_pool_size, pre_pool_size],
+                                             name="crops")
+            return self._max_pool(crops)
+        else:
+            return tf.image.crop_and_resize(shared_layers,
+                                            tf.stop_gradient(bboxes),
+                                            box_ind=tf.to_int32(batch_ids),
+                                            crop_size=[self._pool_size, self._pool_size],
+                                            name="crops")
 
 
 def crop_and_resize(image, boxes, box_ind, crop_size, pad_border=True):

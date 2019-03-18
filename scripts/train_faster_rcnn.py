@@ -91,6 +91,7 @@ def _get_default_resnet_model(depth=50):
         roi_proposal_stds=CONFIG['roi_proposal_stds'],
 
         roi_pool_size=CONFIG['roi_pooling_size'],
+        roi_pooling_max_pooling_flag=CONFIG['roi_pooling_max_pooling_flag'],
 
         roi_sigma=CONFIG['roi_sigma'],
         roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
@@ -137,6 +138,7 @@ def _get_default_vgg16_model(slim_ckpt_file_path=None):
         roi_proposal_stds=CONFIG['roi_proposal_stds'],
 
         roi_pool_size=CONFIG['roi_pooling_size'],
+        roi_pooling_max_pooling_flag=CONFIG['roi_pooling_max_pooling_flag'],
 
         roi_sigma=CONFIG['roi_sigma'],
         roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
@@ -164,10 +166,10 @@ def _get_default_optimizer(use_adam):
 
 
 def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
-                          pascal_mode='trainval', pascal_tf_records_num=5,
+                          pascal_year="2007", pascal_mode='trainval', pascal_tf_records_num=5,
                           data_root_path=None):
     if dataset_type == 'pascal':
-        base_pattern = 'pascal_{}_%02d.tfrecords'.format(pascal_mode)
+        base_pattern = 'pascal_{}_{}_%02d.tfrecords'.format(pascal_year, pascal_mode)
         file_names = [os.path.join(data_root_path, base_pattern % i)
                       for i in range(pascal_tf_records_num)]
         dataset = pascal_get_dataset(file_names,
@@ -364,8 +366,10 @@ def parse_args():
     parser.add_argument('--gpu_id', default="0", type=str, help='used in sys variable CUDA_VISIBLE_DEVICES')
     parser.add_argument('--model', default="vgg16", type=str, help='one of [vgg16, resnet50, resnet101]')
     parser.add_argument('--data_type', default="pascal", type=str, help='pascal or coco')
-    parser.add_argument('--pascal_mode', default="trainval", type=str, help='pascal training set mode')
+    parser.add_argument('--pascal_year', default="2007", type=str, help='one of [2007, 2012, 0712]')
+    parser.add_argument('--pascal_mode', default="trainval", type=str, help='one of [trainval, train, val]')
     parser.add_argument('--pascal_tf_records_num', default=5, type=int, help='number of pascal tf records')
+
     parser.add_argument('--logging_every_n_steps', default=100, type=int)
     parser.add_argument('--saving_every_n_steps', default=5000, type=int)
     parser.add_argument('--summary_every_n_steps', default=100, type=int)
@@ -378,7 +382,7 @@ def parse_args():
     parser.add_argument('--data_root_path', type=str, help='if data_type is pascal: path to save tf record files',
                         default="/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records")
     parser.add_argument('--logs_dir', type=str, help='path to save ckpt files and tensorboard summaries.',
-                        default="/ssd/zhangyiyang/test/tf_eager_object_detection/logs")
+                        default="/ssd/zhangyiyang/tf_eager_object_detection/logs")
     parser.add_argument('--logs_name', type=str, default='default',
                         help='logs dir name pattern is `logs-{data_type}-{model}-{logs_name}`', )
     parser.add_argument('--slim_ckpt_file_path', type=str, default=None,
@@ -438,6 +442,7 @@ def main(args):
 
     train(training_dataset=_get_training_dataset(preprocessing_type=preprocessing_type,
                                                  dataset_type=args.data_type,
+                                                 pascal_year=args.pascal_year,
                                                  pascal_mode=args.pascal_mode,
                                                  pascal_tf_records_num=args.pascal_tf_records_num,
                                                  data_root_path=args.data_root_path),

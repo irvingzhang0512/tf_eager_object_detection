@@ -6,7 +6,7 @@ import argparse
 from object_detection.model.fpn.resnet_fpn import ResnetV1Fpn
 from object_detection.evaluation.pascal_eval_files_utils import get_prediction_files
 from object_detection.evaluation.detectron_pascal_evaluation_utils import voc_eval
-from object_detection.config.faster_rcnn_config import PASCAL_CONFIG as CONFIG
+from object_detection.config.fpn_config import PASCAL_CONFIG as CONFIG
 from tensorflow.contrib.eager.python import saver as eager_saver
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
@@ -163,7 +163,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Evaluate a FPN model')
     parser.add_argument('ckpt_file_path', type=str, help='target ckpt file path', )
     parser.add_argument('--gpu_id', type=str, default='0')
-    parser.add_argument('--model', type=str, default='vgg16', help='one of [vgg16, resnet50, resnet101]')
+    parser.add_argument('--model', type=str, default='resnet50', help='one of [resnet50, resnet101, resnet152]')
     parser.add_argument('--use_local_result_files', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
                         default='cv2', type=str)

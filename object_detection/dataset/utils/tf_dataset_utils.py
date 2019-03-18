@@ -112,12 +112,14 @@ def preprocessing_func(image, bboxes, height, width, labels,
     scale1 = min_size / tf.minimum(height, width)
     scale2 = max_size / tf.maximum(height, width)
     scale = tf.minimum(scale1, scale2)
-
-    # 由于 fpn eager 模式存在的问题，必须令输入图片的边长能被32整除，否则会导致 extractor 报错
     n_height = tf.to_int32(scale * height)
-    n_height = n_height - tf.mod(n_height, 32)
     n_width = tf.to_int32(scale * width)
-    n_width = n_width - tf.mod(n_width, 32)
+
+    # # 由于 fpn eager 模式存在的问题，必须令输入图片的边长能被32整除，否则会导致 extractor 报错
+    # # 在eval阶段，该操作会使得 tf-faster-rcnn 模型精度降低
+    # n_height = n_height - tf.mod(n_height, 32)
+    # n_width = n_width - tf.mod(n_width, 32)
+
     image = tf.image.resize_bilinear(image, (n_height, n_width))
 
     channels = tf.split(axis=-1, num_or_size_splits=4, value=bboxes)

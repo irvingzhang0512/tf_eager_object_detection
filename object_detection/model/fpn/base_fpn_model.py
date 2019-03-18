@@ -414,6 +414,74 @@ class BaseFPN(tf.keras.Model):
         new_rois = tf.concat(new_rois, axis=0)
         return tf.gather(new_rois, idx)
 
+    def im_detect(self, image, img_scale):
+        image_shape = image.get_shape().as_list()[1:3]
+        tf.logging.debug('image shape is {}'.format(image_shape))
+
+        # get backbone results: p2, p3, p4, p5, p6
+        p_list = self._extractor(image, training=False)
+        tf.logging.debug('shared_features length is {}'.format(len(p_list)))
+        for idx, p in enumerate(p_list):
+            tf.logging.debug('p{} shape is {}'.format(idx + 2, p.get_shape().as_list()))
+
+        # get rpn head results
+        all_fpn_scores = []
+        all_fpn_bbox_pred = []
+        for level_name, p in zip(self._level_name_list, p_list):
+            cur_score, cur_bboxes_pred = self._rpn_head(p, False)
+            all_fpn_scores.append(cur_score)
+            all_fpn_bbox_pred.append(cur_bboxes_pred)
+            tf.logging.debug('fpn {} get rpn score shape {}'.format(level_name, cur_score.get_shape().as_list()))
+        all_fpn_bbox_pred = tf.concat(all_fpn_bbox_pred, axis=0, name='all_fpn_bbox_pred')
+        all_fpn_scores = tf.concat(all_fpn_scores, axis=0, name='all_fpn_scores')
+        tf.logging.debug('all_fpn_bbox_pred shape is {}'.format(all_fpn_bbox_pred.get_shape().as_list()))
+        tf.logging.debug('all_fpn_scores shape is {}'.format(all_fpn_scores.get_shape().as_list()))
+
+        # generate anchors
+        all_anchors = []
+        for idx in range(len(self._level_name_list)):
+            level_name = self._level_name_list[idx]
+            extractor_stride = self._anchor_stride_list[idx]
+            anchor_base = self._anchor_base_list[idx]
+
+            cur_anchors = self._anchor_generator(anchor_base, extractor_stride,
+                                                 tf.to_int32(image_shape[0] / extractor_stride),
+                                                 tf.to_int32(image_shape[1] / extractor_stride)
+                                                 )
+            all_anchors.append(cur_anchors)
+            tf.logging.debug('{} generate {} anchors'.format(level_name, cur_anchors.shape[0]))
+        all_anchors = tf.concat(all_anchors, axis=0, name='all_anchors')
+        tf.logging.debug('all_anchors shape is {}'.format(all_anchors.get_shape().as_list()))
+
+        # generate rpn results: rois
+        rois = self._rpn_proposal((all_fpn_bbox_pred, all_anchors, all_fpn_scores, image_shape),
+                                  training=False)
+
+        # 预测时，计算所有 region proposal 生成的 roi 的 roi_features，默认为300个
+        all_roi_features = []
+        rois_list, _ = self._assign_levels(rois)
+        for level_name, cur_rois, cur_p, cur_stride in zip(self._level_name_list[:-1],
+                                                           rois_list, p_list, self._anchor_stride_list):
+            if cur_rois.shape[0] == 0:
+                continue
+            cur_roi_features = self._roi_pooling((cur_p, cur_rois, cur_stride), training=False)
+            all_roi_features.append(cur_roi_features)
+            tf.logging.debug('{} generate {} roi features'.format(level_name, cur_roi_features.shape[0]))
+        roi_features = tf.concat(all_roi_features, axis=0, name='all_roi_features')
+        roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
+
+        # pred_bboxes, pred_labels, pred_scores
+        roi_score_softmax = tf.nn.softmax(roi_score)
+
+        new_rois = []
+        for cur_rois_list in rois_list:
+            if cur_rois_list.shape[0] != 0:
+                new_rois.append(cur_rois_list)
+        new_rois = tf.concat(new_rois, axis=0)
+        new_rois = new_rois / tf.to_float(img_scale)
+
+        return roi_score_softmax, roi_bboxes_txtytwth, new_rois
+
 
 class RpnHead(tf.keras.Model):
     def __init__(self, num_anchors, weight_decay=0.0001):

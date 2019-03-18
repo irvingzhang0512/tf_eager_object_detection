@@ -107,7 +107,7 @@ def get_resnet_model(stack_fn,
     x = layers.Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv', trainable=False, padding='valid')(x)
 
     x = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
-                                  name='conv1_bn')(x)
+                                  name='conv1_bn', trainable=False)(x)
     x = layers.Activation('relu', name='conv1_relu')(x)
 
     x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
@@ -220,6 +220,7 @@ class ResNetFasterRcnn(BaseFasterRcnn):
 
                  # roi pooling 参数
                  roi_pool_size=7,
+                 roi_pooling_max_pooling_flag=True,
 
                  # proposal target 以及相关损失函数参数
                  roi_sigma=1,
@@ -266,6 +267,7 @@ class ResNetFasterRcnn(BaseFasterRcnn):
                          roi_proposal_stds=roi_proposal_stds,
 
                          roi_pool_size=roi_pool_size,
+                         roi_pooling_max_pooling_flag=roi_pooling_max_pooling_flag,
 
                          roi_sigma=roi_sigma,
                          roi_training_pos_iou_threshold=roi_training_pos_iou_threshold,
@@ -297,13 +299,16 @@ class ResNetFasterRcnn(BaseFasterRcnn):
             "resnet_v1_101/conv1/BatchNorm/": "conv1_bn",
         }
 
-        keras_format = '{}_{}_{}_{}' # conv5_block1_0_bn
-        ckpt_format = 'resnet_v1_101/{}/{}/bottleneck_v1/{}/{}' # resnet_v1_101/block3/unit_1/bottleneck_v1/conv3/
+        keras_format = '{}_{}_{}_{}'  # conv5_block1_0_bn
+        ckpt_format = 'resnet_v1_101/{}/{}/bottleneck_v1/{}/{}'  # resnet_v1_101/block3/unit_1/bottleneck_v1/conv3/
 
         # block1 - unit_1 - shortcut
         # conv2 - block1 - 0
-        extractor_dict[ckpt_format.format('block1', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv2', 'block1', 0, 'bn')
-        extractor_dict[ckpt_format.format('block1', 'unit_1', 'shortcut', '')] = keras_format.format('conv2', 'block1', 0, 'conv')
+        extractor_dict[ckpt_format.format('block1', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv2',
+                                                                                                               'block1',
+                                                                                                               0, 'bn')
+        extractor_dict[ckpt_format.format('block1', 'unit_1', 'shortcut', '')] = keras_format.format('conv2', 'block1',
+                                                                                                     0, 'conv')
         # block1 - unit_1-3 - conv1-3
         # conv2 - block1-3 - 1-3
         for i in range(1, 4):
@@ -317,8 +322,11 @@ class ResNetFasterRcnn(BaseFasterRcnn):
 
         # block2 - unit_1 - shortcut
         # conv3 block1 0
-        extractor_dict[ckpt_format.format('block2', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv3', 'block1', 0, 'bn')
-        extractor_dict[ckpt_format.format('block2', 'unit_1', 'shortcut', '')] = keras_format.format('conv3', 'block1', 0, 'conv')
+        extractor_dict[ckpt_format.format('block2', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv3',
+                                                                                                               'block1',
+                                                                                                               0, 'bn')
+        extractor_dict[ckpt_format.format('block2', 'unit_1', 'shortcut', '')] = keras_format.format('conv3', 'block1',
+                                                                                                     0, 'conv')
         # block2 unit_1-4 conv1-3
         # conv3 block1-4 1-3
         for i in range(1, 5):
@@ -332,8 +340,11 @@ class ResNetFasterRcnn(BaseFasterRcnn):
 
         # block3 - unit_1 - shortcut
         # conv4 block1 0
-        extractor_dict[ckpt_format.format('block3', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv4', 'block1', 0, 'bn')
-        extractor_dict[ckpt_format.format('block3', 'unit_1', 'shortcut', '')] = keras_format.format('conv4', 'block1', 0, 'conv')
+        extractor_dict[ckpt_format.format('block3', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv4',
+                                                                                                               'block1',
+                                                                                                               0, 'bn')
+        extractor_dict[ckpt_format.format('block3', 'unit_1', 'shortcut', '')] = keras_format.format('conv4', 'block1',
+                                                                                                     0, 'conv')
         # block3 unit_1-23 conv1-3
         # conv4 block1-23 1-3
         for i in range(1, 24):

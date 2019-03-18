@@ -45,6 +45,7 @@ class BaseFasterRcnn(tf.keras.Model):
 
                  # roi pooling 参数
                  roi_pool_size,
+                 roi_pooling_max_pooling_flag,
 
                  # proposal target 以及相关损失函数参数
                  roi_sigma,
@@ -60,6 +61,7 @@ class BaseFasterRcnn(tf.keras.Model):
                  prediction_score_threshold,
                  ):
         super().__init__()
+        # 保存后续使用到的参数
         self.num_classes = num_classes
         self.weight_decay = weight_decay
 
@@ -80,6 +82,8 @@ class BaseFasterRcnn(tf.keras.Model):
 
         self._anchor_generator = generate_by_anchor_base_tf
         self._anchor_base = tf.to_float(generate_anchor_base(extractor_stride, ratios, scales))
+
+        # 创建Faster R-CNN的核心组件
         self._rpn_head = RpnHead(num_anchors=self._num_anchors, weight_decay=weight_decay)
         self._rpn_proposal = RegionProposal(
             num_anchors=self._num_anchors,
@@ -99,7 +103,8 @@ class BaseFasterRcnn(tf.keras.Model):
             target_means=rpn_proposal_means,
             target_stds=rpn_proposal_stds,
         )
-        self._roi_pooling = RoiPoolingCropAndResize(pool_size=roi_pool_size)
+        self._roi_pooling = RoiPoolingCropAndResize(pool_size=roi_pool_size,
+                                                    max_pooling_flag=roi_pooling_max_pooling_flag)
         self._proposal_target = ProposalTarget(
             pos_iou_threshold=roi_training_pos_iou_threshold,
             neg_iou_threshold=roi_training_neg_iou_threshold,
@@ -230,7 +235,7 @@ class BaseFasterRcnn(tf.keras.Model):
         rpn_training_idx, _, _, rpn_pos_num = self._anchor_target((anchors,
                                                                    gt_bboxes,
                                                                    image_shape),
-                                                                  False)
+                                                                  training=True)
 
         return tf.gather(anchors, rpn_training_idx[:rpn_pos_num])
 
@@ -249,10 +254,10 @@ class BaseFasterRcnn(tf.keras.Model):
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
 
         rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=True)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape),
                                   training=True)
         # final_rois, final_labels, final_bbox_targets, bbox_inside_weights, bbox_outside_weights
-        return self._proposal_target((rois, gt_bboxes, gt_labels), True)
+        return self._proposal_target((rois, gt_bboxes, gt_labels), training=True)
 
     def test_one_image(self, img_path, min_size=600, max_size=1000, preprocessing_type='caffe'):
         from dataset.utils.tf_dataset_utils import preprocessing_func
@@ -263,7 +268,7 @@ class BaseFasterRcnn(tf.keras.Model):
         preprocessed_image, _, _, _ = preprocessing_func(img, np.zeros([1, 4], np.float32), h, w, None,
                                                          min_size=min_size, max_size=max_size,
                                                          preprocessing_type=preprocessing_type)
-        bboxes, labels, scores = self(preprocessed_image, False)
+        bboxes, labels, scores = self(preprocessed_image, training=False)
         return bboxes, labels, scores
 
     def im_detect(self, image, img_scale):
@@ -282,7 +287,7 @@ class BaseFasterRcnn(tf.keras.Model):
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
 
         rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=False)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape, self._extractor_stride),
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape),
                                   training=False)
 
         roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),

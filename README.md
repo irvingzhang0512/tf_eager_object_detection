@@ -62,6 +62,8 @@
 + [x] add model load/save functions.
 + [x] predict and visual scripts.
 + [x] add resnet faster rcnn model.
++ [ ] eval result file paths.
++ [ ] implement proposal target with tf version of `numpy.random.choice`.
 
 
 ## 3. training records
@@ -78,12 +80,14 @@
     + Step 4: training roi head only(roi loss, 14 epochs, `logs-pascal-slim-roi-only`), mAP is 0.6733.
 
 ### 3.2. ResNet-Faster-RCNN
-+ resnet 50
-    + end-to-end training: load keras pre-trained model(`logs-pascal-resnet50-default`)。
-        + SGD：mAP 0.38, 0.43, 0.48, 0.506, 0.516
 + resnet 101
+    + load tf-faster-rcnn pre-trained model, mAP of pascal 2007 test set:
+        + standard: 0.7566
+        + set height & width to 32x: 0.7218
     + end to end training: load keras pre-trained model(`logs-pascal-resnet101-default`):
-        + SGD: 14 epoch 0.58
+        + without roi pooling max pooling(wrong bn trainable): mAP 0.41, 0.49, 0.54, 0.559, 0.568, 0.61(14 epochs).
+        + without roi pooling max pooling: mAP 0.408, 0.4842
+        + with roi pooling max pooling(wrong bn trainable): mAP 0.6434(11 epoch), 0.6468, 0.6423, 0.6351
 
 ## 4. 可有可无的教程……
 + training on pascal voc 2007 trainval set, evaluating on pascal voc 2007 test set.

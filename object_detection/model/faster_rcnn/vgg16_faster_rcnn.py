@@ -46,6 +46,7 @@ class Vgg16FasterRcnn(BaseFasterRcnn):
 
                  # roi pooling 参数
                  roi_pool_size=7,
+                 roi_pooling_max_pooling_flag=True,
 
                  # proposal target 以及相关损失函数参数
                  roi_sigma=1,
@@ -88,6 +89,7 @@ class Vgg16FasterRcnn(BaseFasterRcnn):
                          roi_proposal_stds=roi_proposal_stds,
 
                          roi_pool_size=roi_pool_size,
+                         roi_pooling_max_pooling_flag=roi_pooling_max_pooling_flag,
 
                          roi_sigma=roi_sigma,
                          roi_training_pos_iou_threshold=roi_training_pos_iou_threshold,

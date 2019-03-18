@@ -130,6 +130,7 @@ def _get_default_resnet_model(depth=50):
         roi_proposal_stds=CONFIG['roi_proposal_stds'],
 
         roi_pool_size=CONFIG['roi_pooling_size'],
+        roi_pooling_max_pooling_flag=CONFIG['roi_pooling_max_pooling_flag'],
 
         roi_sigma=CONFIG['roi_sigma'],
         roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
@@ -174,6 +175,7 @@ def _get_default_vgg16_model():
 
         roi_pool_size=CONFIG['roi_pooling_size'],
         roi_head_keep_dropout_rate=CONFIG['roi_head_keep_dropout_rate'],
+        roi_pooling_max_pooling_flag=CONFIG['roi_pooling_max_pooling_flag'],
 
         roi_sigma=CONFIG['roi_sigma'],
         roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
@@ -217,19 +219,19 @@ def parse_args():
     parser.add_argument('--use_local_result_files', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
                         default='cv2', type=str)
-    parser.add_argument('--root_path', help='path to pascal voc 2007',
-                        default='D:\\data\\VOCdevkit\\VOC2007', type=str)
-    parser.add_argument('--result_file_format', help='local detection result file pattern',
-                        default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
-    parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-                        default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
-
     # parser.add_argument('--root_path', help='path to pascal voc 2007',
-    #                     default='/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/VOC2007', type=str)
+    #                     default='D:\\data\\VOCdevkit\\VOC2007', type=str)
     # parser.add_argument('--result_file_format', help='local detection result file pattern',
-    #                     default='/ssd/zhangyiyang/tf_eager_object_detection/results/{:s}.txt', type=str)
+    #                     default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
     # parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-    #                     default='/ssd/zhangyiyang/tf_eager_object_detection/results', type=str)
+    #                     default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
+
+    parser.add_argument('--root_path', help='path to pascal voc 2007',
+                        default='/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/VOC2007', type=str)
+    parser.add_argument('--result_file_format', help='local detection result file pattern',
+                        default='/ssd/zhangyiyang/tf_eager_object_detection/results/{:s}.txt', type=str)
+    parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
+                        default='/ssd/zhangyiyang/tf_eager_object_detection/results', type=str)
 
     if len(sys.argv) == 1:
         parser.print_help()
