@@ -445,8 +445,8 @@ class BaseFPN(tf.keras.Model):
             anchor_base = self._anchor_base_list[idx]
 
             cur_anchors = self._anchor_generator(anchor_base, extractor_stride,
-                                                 tf.to_int32(image_shape[0] / extractor_stride),
-                                                 tf.to_int32(image_shape[1] / extractor_stride)
+                                                 tf.to_int32(tf.ceil(image_shape[0] / extractor_stride)),
+                                                 tf.to_int32(tf.ceil(image_shape[1] / extractor_stride))
                                                  )
             all_anchors.append(cur_anchors)
             tf.logging.debug('{} generate {} anchors'.format(level_name, cur_anchors.shape[0]))

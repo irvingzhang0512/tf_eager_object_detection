@@ -49,27 +49,27 @@ def block1(x, filters, kernel_size=3, stride=1,
                                  kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                  name=name + '_0_conv', trainable=trainable)(x)
         shortcut = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                             name=name + '_0_bn', trainable=trainable)(shortcut)
+                                             name=name + '_0_bn', trainable=False)(shortcut, training=False)
     else:
         shortcut = x
 
     x = layers.Conv2D(filters, 1, strides=stride, name=name + '_1_conv', trainable=trainable,
                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_1_bn', trainable=trainable)(x)
+                                  name=name + '_1_bn', trainable=False)(x, training=False)
     x = layers.Activation('relu', name=name + '_1_relu')(x)
 
     x = layers.Conv2D(filters, kernel_size, padding='SAME',
                       name=name + '_2_conv', trainable=trainable,
                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_2_bn', trainable=trainable)(x)
+                                  name=name + '_2_bn', trainable=False)(x, training=False)
     x = layers.Activation('relu', name=name + '_2_relu')(x)
 
     x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv', trainable=trainable,
                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay), )(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_3_bn', trainable=trainable)(x)
+                                  name=name + '_3_bn', trainable=False)(x, training=False)
 
     x = layers.Add(name=name + '_add')([shortcut, x])
     x = layers.Activation('relu', name=name + '_out')(x)
@@ -107,7 +107,7 @@ def get_resnet_model(stack_fn,
     x = layers.Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv', trainable=False, padding='valid')(x)
 
     x = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
-                                  name='conv1_bn', trainable=False)(x)
+                                  name='conv1_bn', trainable=False)(x, training=False)
     x = layers.Activation('relu', name='conv1_relu')(x)
 
     x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)

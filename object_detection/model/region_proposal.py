@@ -36,11 +36,10 @@ class RegionProposal(tf.keras.Model):
 
     def call(self, inputs, training=None, mask=None):
         """
-        不参与训练
         生成 rpn 的结果，即一组 bboxes，用于后续 roi pooling
         总体过程：
-        1. 使用anchors使用rpn_pred修正，获取所有预测结果。
-        2. 对选中修正后的anchors进行处理。
+        1. 使用anchors和rpn_pred修正，获取所有预测结果。
+        2. 对选中修正后的anchors进行处理（剪裁）。
         3. 根据rpn_score获取num_pre_nms个anchors。
         4. 进行nms。
         5. 根据rpn_score排序，获取num_post_nms个anchors作为proposal结果。
@@ -85,4 +84,5 @@ class RegionProposal(tf.keras.Model):
 
         tf_logging.debug('rpn proposal net generate %d proposals' % tf.size(selected_idx))
 
+        # 不参与训练，所以需要设置 tf.stop_gradient
         return tf.stop_gradient(tf.gather(decoded_bboxes, selected_idx))

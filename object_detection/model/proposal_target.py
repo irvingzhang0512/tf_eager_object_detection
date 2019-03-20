@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from object_detection.utils.bbox_tf import pairwise_iou
 from object_detection.utils.bbox_transform import encode_bbox_with_mean_and_std
@@ -35,12 +36,16 @@ class ProposalTarget(tf.keras.Model):
         总体过程：
         1. 计算 rois 与 gt_bboxes（即输入数据中的bbox）的iou
         2. 设置与 gt_bboxes 的 max_iou > pos_iou_threshold 的 roi 为正例，设置 max_iou < neg_iou_threshold 的 roi 为反例
-        3. 对正例、反例有数量限制，正例数量不大于 max_pos_samples，正例反例总数不超过 max_pos_samples
-        4. 最终输出三个结果：
-                1）参与训练的 roi 的编号
-                2）每个参与训练的 roi 的label [0, num_classes)，可直接用于 cls loss
-                3）pos rois 对应的 gt，可直接用于 reg loss
-                4）pos anchors num，scalar
+        3. 对正例、反例有数量限制：
+            正例数量不大于 max_pos_samples
+            正例反例总数不超过 max_pos_samples
+            反例数量如果过少，则通过 numpy.random.choice 随机填充
+        4. 最终输出5个结果：
+                1）rois [128, 4]
+                2）每个 roi 对应的 label [128,]，如果我为0则表示为反例，>0则表示为正例
+                3）每个 roi 对应的 txtytwth [128, num_classes * 4]
+                4）计算 smooth l1 loss时的 bbox_inside_weights [128, num_classes * 4]
+                5）计算 smooth l1 loss时的 bbox_outside_weights [128, num_classes * 4]
         :param inputs:
         :param training:
         :param mask:
@@ -55,15 +60,21 @@ class ProposalTarget(tf.keras.Model):
 
         # 根据条件获取 前景 背景
         fg_inds = tf.where(max_overlaps >= self._pos_iou_threshold)[:, 0]
-        # bg_inds = tf.where(tf.logical_and(max_overlaps < self._pos_iou_threshold,
-        #                                   max_overlaps >= self._neg_iou_threshold))[:, 0]
-        bg_inds = tf.where(max_overlaps < self._pos_iou_threshold)[:, 0]
+        bg_inds = tf.where(tf.logical_and(max_overlaps < self._pos_iou_threshold,
+                                          max_overlaps >= self._neg_iou_threshold))[:, 0]
+        # bg_inds = tf.where(max_overlaps < self._pos_iou_threshold)[:, 0]
 
         # 筛选 前景/背景
         if tf.size(fg_inds) > self._max_pos_samples:
             fg_inds = tf.random_shuffle(fg_inds)[:self._max_pos_samples]
         if tf.size(bg_inds) > self._total_num_samples - tf.size(fg_inds):
+            # 如果bg sample的数量多于要求值，则随机筛选
             bg_inds = tf.random_shuffle(bg_inds)[:(self._total_num_samples - tf.size(fg_inds))]
+        else:
+            # 如果bg sample的数量少于要求数值，则重复获取
+            target_size = (self._total_num_samples - tf.size(fg_inds)).numpy()
+            bg_inds = np.random.choice(bg_inds.numpy(), size=int(target_size), replace=True)
+
         tf.logging.debug('proposal target generate %d fgs and %d bgs.' % (tf.size(fg_inds), tf.size(bg_inds)))
 
         keep_inds = tf.concat([fg_inds, bg_inds], axis=0)

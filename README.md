@@ -62,8 +62,10 @@
 + [x] add model load/save functions.
 + [x] predict and visual scripts.
 + [x] add resnet faster rcnn model.
++ [x] implement proposal target with tf version of `numpy.random.choice`.
 + [ ] eval result file paths.
-+ [ ] implement proposal target with tf version of `numpy.random.choice`.
++ [ ] BUG: after a few epochs, gpu memory will boomed...
++ [ ] use `defun` in all components.
 
 
 ## 3. training records
@@ -81,13 +83,13 @@
 
 ### 3.2. ResNet-Faster-RCNN
 + resnet 101
+    + train tf-faster-rcnn resnet101 by myself: 0.7393.
     + load tf-faster-rcnn pre-trained model, mAP of pascal 2007 test set:
         + standard: 0.7566
         + set height & width to 32x: 0.7218
     + end to end training: load keras pre-trained model(`logs-pascal-resnet101-default`):
-        + without roi pooling max pooling(wrong bn trainable): mAP 0.41, 0.49, 0.54, 0.559, 0.568, 0.61(14 epochs).
-        + without roi pooling max pooling: mAP 0.408, 0.4842
-        + with roi pooling max pooling(wrong bn trainable): mAP 0.6434(11 epoch), 0.6468, 0.6423, 0.6351
+        + fixed image, without max pooling, proposal target random choice: 0.2740, 0.4137, 0.5065(5 epochs), 0.5521(14 epochs)
+        + 0.5848(2 epochs), 0.6215, 0.6417
 
 ## 4. 可有可无的教程……
 + training on pascal voc 2007 trainval set, evaluating on pascal voc 2007 test set.

@@ -36,12 +36,11 @@ class AnchorTarget(tf.keras.Model):
         3. 设置与 gt_bboxes 的 max_iou > 0.7的anchor为正例，设置 max_iou < 0.3 的anchor为反例。
         4. 设置与每个 gt_bboxes 的iou最大的anchor为正例。
         5. 对正例、反例有数量限制，正例数量不大于 max_pos_samples，正例反例总数不超过 max_pos_samples。
-        6. 最终输出4个结果：
-                1）参与训练的 anchor 在原始 anchors 中的编号, [training_anchors_num, ], tf.int32
-                2）每个参与训练的anchor的label（正例还是反例，顺序与前一结果对应）, [training_anchors_num, ], tf.int32
-                3）rpn training reg loss 中对应的 gt，[training_pos_anchors_num, 4], tf.float32
-                4）正例数量，scalar，tf.int32
-                PS: 保证正例idx、label在前面，反例idx、label在后面
+        6. 最终输出5个结果：
+                1）所有anchors的label [all_anchors_num, ],-1表示不参加训练，0表示反例，1表示正例
+                2）所有anchors对应的 txtwtyth [all_anchors_num, 4]，只有正例参加训练，反例不参加训练
+                3）smooth l1 loss 中的 bbox_inside_weights [all_anchors_num, 4]
+                3）smooth l1 loss 中的 bbox_outside_weights [all_anchors_num, 4]
         :param inputs:
         :param training:
         :param mask:
@@ -88,7 +87,7 @@ class AnchorTarget(tf.keras.Model):
                                                        target_means=self._target_means,
                                                        target_stds=self._target_stds)
 
-        # 只有整理才有 reg loss
+        # 只有正例才有 reg loss
         bbox_inside_weights = tf.zeros((anchors.shape[0], 4), dtype=tf.float32)
         bbox_inside_weights = tf.scatter_update(tf.Variable(bbox_inside_weights),
                                                 tf.where(tf.equal(labels, 1))[:, 0], 1)
