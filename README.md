@@ -64,7 +64,7 @@
 + [x] add resnet faster rcnn model.
 + [x] implement proposal target with tf version of `numpy.random.choice`.
 + [ ] eval result file paths.
-+ [ ] BUG: after a few epochs, gpu memory will boomed...
++ [ ] BUG: after a few epochs, gpu memory will boomed twice...
 + [ ] use `defun` in all components.
 
 
@@ -84,15 +84,17 @@
 ### 3.2. ResNet-Faster-RCNN
 + resnet 101
     + train tf-faster-rcnn resnet101 by myself: 0.7393.
-    + load tf-faster-rcnn pre-trained model, mAP of pascal 2007 test set:
+    + load official tf-faster-rcnn pre-trained model, mAP of pascal 2007 test set:
         + standard: 0.7566
         + set height & width to 32x: 0.7218
     + end to end training: load keras pre-trained model(`logs-pascal-resnet101-default`):
-        + fixed image, without max pooling, proposal target random choice: 0.2740, 0.4137, 0.5065(5 epochs), 0.5521(14 epochs)
-        + 0.5848(2 epochs), 0.6215, 0.6417
+        + fixed image, without max pooling, proposal target random choice: 0.7276(0.7267)
+        + fixed image, without max pooling, proposal target random choice: 00.7249(0.7259)
+        + fixed image, max pooling, proposal target random choice: 0.7235
 
 ## 4. 可有可无的教程……
 + training on pascal voc 2007 trainval set, evaluating on pascal voc 2007 test set.
-+ Step 1: generate trainval datasets, set configs and use `python scripts/generate_pascal_tf_records.py` to generate tf records.
++ Step 0: generate python protos by `protoc ./object_detection/protos/*.proto --python_out=./object_detection/protos/ `.
++ Step 1: generate trainval datasets, set configs and use `python scripts/generate_pascal_tf_records.py`.
 + Step 2: training by `python scripts/train.py`, get logs at `/path/to/logs_dir/`.
 + Step 3: evaluating by `python scripts/eval_pascal.py /path/to/logs_dir/ckpt`.

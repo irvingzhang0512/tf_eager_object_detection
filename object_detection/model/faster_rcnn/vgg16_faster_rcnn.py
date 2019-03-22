@@ -170,6 +170,10 @@ class Vgg16FasterRcnn(BaseFasterRcnn):
             ])
             tf.logging.info('successfully loaded weights for {}'.format(roi_head_dict[slim_tensor_name_pre]))
 
+    def disable_biases(self):
+        # vgg16 doesn't need to diable biases
+        pass
+
 
 class Vgg16RoiHead(tf.keras.Model):
     def __init__(self, num_classes,

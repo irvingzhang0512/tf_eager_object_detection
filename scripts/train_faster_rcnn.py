@@ -31,7 +31,7 @@ def apply_gradients(model, optimizer, gradients):
             if grad is None:
                 continue
             scale = 1.0
-            if 'biases' in var.name:
+            if 'bias' in var.name:
                 scale = 2.0
             all_grads.append(grad * scale)
             all_vars.append(var)
@@ -326,6 +326,7 @@ def train(training_dataset, base_model, optimizer, loss_type,
     # 重大bug……
     # 如果没有进行这步操作，keras模型中rpn head的参数并没有初始化，不存在于后续 base_model.variables 中
     base_model(tf.to_float(np.random.rand(1, 800, 600, 3), False))
+    # base_model.disable_biases()
 
     # 获取 pretrained model
     saver = eager_saver.Saver(base_model.variables)

@@ -433,3 +433,14 @@ class ResNetFasterRcnn(BaseFasterRcnn):
                 ]
             roi_head.get_layer(name=roi_head_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
             tf.logging.info('successfully loaded weights for {}'.format(roi_head_dict[tf_faster_rcnn_name_pre]))
+
+    def disable_biases(self):
+        backbone = self.get_layer('resnet101')
+        for l in backbone.layers:
+            if '_conv' in l.name:
+                l.use_bias = False
+        roi_head = self.get_layer('resnet101_roi_head')
+        for l in roi_head.layers:
+            if '_conv' in l.name and 'block' in l.name:
+                l.use_bias = False
+
