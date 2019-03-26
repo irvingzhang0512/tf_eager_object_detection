@@ -143,15 +143,20 @@ class BaseFasterRcnn(tf.keras.Model):
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
 
         rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=training)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape),
+
+        # 这里这么复杂，主要是与tf-faster-rcnn对应……
+        scores = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
+        scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
+        scores = tf.reshape(scores, [-1, 2 * self._num_anchors])
+        scores = tf.reshape(scores[..., self._num_anchors:], [-1])
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, scores, image_shape),
                                   training=training)
 
         if training:
             # rpn loss
             rpn_labels, rpn_bbox_targets, rpn_in_weights, rpn_out_weights = self._anchor_target((gt_bboxes,
                                                                                                  image_shape,
-                                                                                                 anchors,
-                                                                                                 self._num_anchors),
+                                                                                                 anchors),
                                                                                                 training)
             rpn_cls_loss, rpn_reg_loss = self._get_rpn_loss(rpn_score, rpn_bbox_txtytwth,
                                                             rpn_labels, rpn_bbox_targets,
@@ -254,7 +259,11 @@ class BaseFasterRcnn(tf.keras.Model):
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
 
         rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=True)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape),
+        scores = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
+        scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
+        scores = tf.reshape(scores, [-1, 2 * self._num_anchors])
+        scores = tf.reshape(scores[..., self._num_anchors:], [-1])
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, scores, image_shape),
                                   training=True)
         # final_rois, final_labels, final_bbox_targets, bbox_inside_weights, bbox_outside_weights
         return self._proposal_target((rois, gt_bboxes, gt_labels), training=True)
@@ -287,7 +296,11 @@ class BaseFasterRcnn(tf.keras.Model):
         tf.logging.debug('anchor_generator generate {} anchors'.format(anchors.shape[0]))
 
         rpn_score, rpn_bbox_txtytwth = self._rpn_head(shared_features, training=False)
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, rpn_score, image_shape),
+        scores = tf.reshape(tf.transpose(tf.reshape(rpn_score, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
+        scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
+        scores = tf.reshape(scores, [-1, 2 * self._num_anchors])
+        scores = tf.reshape(scores[..., self._num_anchors:], [-1])
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, scores, image_shape),
                                   training=False)
 
         roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),

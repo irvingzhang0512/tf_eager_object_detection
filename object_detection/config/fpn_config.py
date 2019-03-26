@@ -11,10 +11,11 @@ def get_default_pascal_faster_rcnn_config():
         'level_name_list': ['p2', 'p3', 'p4', 'p5', 'p6'],
         'min_level': 2,
         'max_level': 5,
+        'top_down_dims': 256,
 
         # preprocessing configs
-        'image_max_size': 1024,
-        'image_min_size': 800,
+        'image_max_size': 1000,
+        'image_min_size': 600,
         'bgr_pixel_means': [103.939, 116.779, 123.68],
 
         # predict & evaluate configs
@@ -51,13 +52,15 @@ def get_default_pascal_faster_rcnn_config():
         'rpn_proposal_train_pre_nms_sample_number': 12000,
         'rpn_proposal_train_after_nms_sample_number': 2000,
         'rpn_proposal_test_pre_nms_sample_number': 6000,
-        'rpn_proposal_test_after_nms_sample_number': 300,
+        'rpn_proposal_test_after_nms_sample_number': 1000,
         'rpn_proposal_nms_iou_threshold': 0.7,
+
+        'roi_pooling_size': 7,
+        'roi_pooling_max_pooling_flag': True,
 
         # roi net configs
         'roi_proposal_means': [0, 0, 0, 0],
         'roi_proposal_stds': [0.1, 0.1, 0.2, 0.2],
-        'roi_pooling_size': 7,
         'roi_sigma': 1.0,
         'roi_pos_iou_threshold': 0.5,
         'roi_neg_iou_threshold': 0.1,

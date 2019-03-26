@@ -46,7 +46,7 @@ class AnchorTarget(tf.keras.Model):
         :param mask:
         :return:
         """
-        gt_bboxes, image_shape, all_anchors, num_anchors = inputs
+        gt_bboxes, image_shape, all_anchors = inputs
         total_anchors = all_anchors.get_shape().as_list()[0]
 
         # 1. 对 anchors 进行过滤，筛选符合边界要求的 anchor，之后操作都基于筛选后的结果。

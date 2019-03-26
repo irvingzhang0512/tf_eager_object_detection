@@ -43,10 +43,6 @@ def get_dataset_by_local_file(mode, root_path,
         new_h = int(scale * h)
         new_w = int(scale * w)
 
-        # 该操作虽然能使得长宽能被32整除，符合FPN的要求，但会导致tf-faster-rcnn模型精度降低
-        # new_h = new_h - new_h % 32
-        # new_w = new_w - new_w % 32
-
         img = cv2.resize(img, (new_w, new_h))
         return img, float(scale), h, w
 

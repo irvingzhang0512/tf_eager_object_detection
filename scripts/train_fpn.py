@@ -18,7 +18,6 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 tf_logging.set_verbosity(tf_logging.DEBUG)
 
 CONFIG = None
-EXCLUDE = None
 
 
 def apply_gradients(model, optimizer, gradients):
@@ -30,33 +29,18 @@ def apply_gradients(model, optimizer, gradients):
             if grad is None:
                 continue
             scale = 1.0
-            if 'biases' in var.name:
+            if 'bias' in var.name:
                 scale = 2.0
             all_grads.append(grad * scale)
             all_vars.append(var)
         gradients = all_grads
 
-    if EXCLUDE is not None:
-        filter_vars = []
-        filter_grads = []
-        for var, grad in zip(all_vars, gradients):
-            if EXCLUDE in var.name:
-                continue
-            filter_vars.append(var)
-            filter_grads.append(grad)
-        gradients = filter_grads
-        all_vars = filter_vars
-
     optimizer.apply_gradients(zip(gradients, all_vars),
                               global_step=tf.train.get_or_create_global_step())
 
 
-def compute_gradients(model, loss, tape):
-    return tape.gradient(loss, model.variables)
-
-
 def train_step(model, loss, tape, optimizer):
-    apply_gradients(model, optimizer, compute_gradients(model, loss, tape))
+    apply_gradients(model, optimizer, tape.gradient(loss, model.variables))
 
 
 def _get_default_resnet_model(depth=50):
@@ -71,6 +55,7 @@ def _get_default_resnet_model(depth=50):
         level_name_list=CONFIG['level_name_list'],
         min_level=CONFIG['min_level'],
         max_level=CONFIG['max_level'],
+        top_down_dims=CONFIG['top_down_dims'],
 
         anchor_stride_list=CONFIG['anchor_stride_list'],
         base_anchor_size_list=CONFIG['base_anchor_size_list'],
@@ -96,6 +81,7 @@ def _get_default_resnet_model(depth=50):
         roi_proposal_stds=CONFIG['roi_proposal_stds'],
 
         roi_pool_size=CONFIG['roi_pooling_size'],
+        roi_pooling_max_pooling_flag=CONFIG['roi_pooling_max_pooling_flag'],
 
         roi_sigma=CONFIG['roi_sigma'],
         roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
@@ -123,10 +109,10 @@ def _get_default_optimizer(use_adam):
 
 
 def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
-                          pascal_mode='trainval', pascal_tf_records_num=5,
+                          pascal_year="2007", pascal_mode='trainval', pascal_tf_records_num=5,
                           data_root_path=None):
     if dataset_type == 'pascal':
-        base_pattern = 'pascal_{}_%02d.tfrecords'.format(pascal_mode)
+        base_pattern = 'pascal_{}_{}_%02d.tfrecords'.format(pascal_year, pascal_mode)
         file_names = [os.path.join(data_root_path, base_pattern % i)
                       for i in range(pascal_tf_records_num)]
         dataset = pascal_get_dataset(file_names,
@@ -143,50 +129,7 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
     return dataset
 
 
-def _get_rpn_l2_loss(base_model):
-    l2_loss = 0
-    for var in base_model.get_layer('vgg16').variables:
-        if 'bias' in var.name or 'block1' in var.name or 'block2' in var.name:
-            continue
-        l2_loss = l2_loss + tf.reduce_sum(tf.square(var))
-    for var in base_model.get_layer('vgg16_rpn_head').variables:
-        if 'bias' in var.name:
-            continue
-        l2_loss = l2_loss + tf.reduce_sum(tf.square(var))
-    l2_loss = l2_loss * CONFIG['weight_decay']
-    return l2_loss
-
-
-def _get_roi_l2_loss(base_model):
-    l2_loss = 0
-    for var in base_model.get_layer('vgg16_roi_head').variables:
-        if 'bias' in var.name:
-            continue
-        l2_loss = l2_loss + tf.reduce_sum(tf.square(var))
-    l2_loss = l2_loss * CONFIG['weight_decay']
-    return l2_loss
-
-
-def train_step_end2end(image, gt_bboxes, gt_labels,
-                       base_model, optimizer, loss_type, ):
-    with tf.GradientTape() as tape:
-        rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = base_model((image, gt_bboxes, gt_labels), True)
-
-        if loss_type == 'total':
-            l2_loss = tf.add_n(base_model.losses)
-            total_loss = rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss + l2_loss
-        elif loss_type == 'rpn':
-            l2_loss = _get_rpn_l2_loss(base_model)
-            total_loss = rpn_cls_loss + rpn_reg_loss + l2_loss
-        else:
-            l2_loss = _get_roi_l2_loss(base_model)
-            total_loss = roi_cls_loss + roi_reg_loss + l2_loss
-
-        train_step(base_model, total_loss, tape, optimizer)
-        return rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss, l2_loss, total_loss
-
-
-def train_one_epoch(dataset, base_model, optimizer, loss_type,
+def train_one_epoch(dataset, base_model, optimizer,
                     preprocessing_type,
                     logging_every_n_steps,
                     summary_every_n_steps,
@@ -200,15 +143,13 @@ def train_one_epoch(dataset, base_model, optimizer, loss_type,
         gt_bboxes = tf.concat([
             channels[1], channels[0], channels[3], channels[2]
         ], axis=1)
-
         gt_labels = tf.to_int32(tf.squeeze(gt_labels, axis=0))
 
-        rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss, l2_loss, total_loss = train_step_end2end(image,
-                                                                                                         gt_bboxes,
-                                                                                                         gt_labels,
-                                                                                                         base_model,
-                                                                                                         optimizer,
-                                                                                                         loss_type, )
+        with tf.GradientTape() as tape:
+            rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = base_model((image, gt_bboxes, gt_labels), True)
+            l2_loss = tf.add_n(base_model.losses)
+            total_loss = rpn_cls_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss + l2_loss
+            train_step(base_model, total_loss, tape, optimizer)
 
         # summary
         if idx % summary_every_n_steps == 0:
@@ -269,7 +210,7 @@ def train_one_epoch(dataset, base_model, optimizer, loss_type,
         idx += 1
 
 
-def train(training_dataset, base_model, optimizer, loss_type,
+def train(training_dataset, base_model, optimizer,
           preprocessing_type,
           logging_every_n_steps,
           save_every_n_steps,
@@ -300,7 +241,7 @@ def train(training_dataset, base_model, optimizer, loss_type,
         start = time.time()
         with train_writer.as_default(), summary.always_record_summaries():
             train_one_epoch(dataset=training_dataset, base_model=base_model,
-                            optimizer=optimizer, loss_type=loss_type, preprocessing_type=preprocessing_type,
+                            optimizer=optimizer, preprocessing_type=preprocessing_type,
                             logging_every_n_steps=logging_every_n_steps,
                             summary_every_n_steps=summary_every_n_steps,
                             saver=saver, save_every_n_steps=save_every_n_steps, save_path=ckpt_dir,
@@ -317,15 +258,15 @@ def parse_args():
     parser.add_argument('--gpu_id', default="0", type=str, help='used in sys variable CUDA_VISIBLE_DEVICES')
     parser.add_argument('--model', default="resnet50", type=str, help='one of [resnet50, resnet101, resnet152]')
     parser.add_argument('--data_type', default="pascal", type=str, help='pascal or coco')
-    parser.add_argument('--pascal_mode', default="trainval", type=str, help='pascal training set mode')
+    parser.add_argument('--pascal_year', default="2007", type=str, help='one of [2007, 2012, 0712]')
+    parser.add_argument('--pascal_mode', default="trainval", type=str, help='one of [trainval, train, val]')
     parser.add_argument('--pascal_tf_records_num', default=5, type=int, help='number of pascal tf records')
+
     parser.add_argument('--logging_every_n_steps', default=100, type=int)
     parser.add_argument('--saving_every_n_steps', default=5000, type=int)
     parser.add_argument('--summary_every_n_steps', default=100, type=int)
     parser.add_argument('--restore_ckpt_path', type=str, default=None)
     parser.add_argument('--use_adam', type=bool, default=False)
-    parser.add_argument('--loss_type', type=str, default='total', help='one of [total, rpn, roi]')
-    parser.add_argument('--exclude_str', type=str, default=None, help='remove var with exclude_str to train.')
 
     # parser.add_argument('--data_root_path', default="/ssd/zhangyiyang/COCO2017", type=str)
     parser.add_argument('--data_root_path', type=str, help='if data_type is pascal: path to save tf record files',
@@ -369,24 +310,18 @@ def main(args):
     else:
         raise ValueError('unknown model {}'.format(args.model))
 
-    if args.loss_type not in ['total', 'roi', 'rpn']:
-        raise ValueError('unknown loss type {}'.format(args.loss_type))
-
-    global EXCLUDE
-    EXCLUDE = args.exclude_str
-
     # logs-{data_type}-{model}-{logs_name}
     logs_name_pattern = 'logs-fpn-{}-{}-{}'
     logs_path_name = logs_name_pattern.format(args.data_type, args.model, args.logs_name)
 
     train(training_dataset=_get_training_dataset(preprocessing_type=preprocessing_type,
                                                  dataset_type=args.data_type,
+                                                 pascal_year=args.pascal_year,
                                                  pascal_mode=args.pascal_mode,
                                                  pascal_tf_records_num=args.pascal_tf_records_num,
                                                  data_root_path=args.data_root_path),
           base_model=cur_model,
           optimizer=_get_default_optimizer(args.use_adam),
-          loss_type=args.loss_type,
           preprocessing_type=preprocessing_type,
 
           logging_every_n_steps=args.logging_every_n_steps,

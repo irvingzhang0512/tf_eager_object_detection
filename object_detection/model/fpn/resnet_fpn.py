@@ -1,5 +1,10 @@
 import tensorflow as tf
+import numpy as np
 from object_detection.model.fpn.base_fpn_model import BaseFPN
+import tensorflow.contrib.slim as slim
+from tensorflow.contrib.slim.nets import resnet_v1
+from tensorflow.contrib.slim.nets import resnet_utils
+from tensorflow.contrib.slim.python.slim.nets.resnet_v1 import resnet_v1_block
 
 layers = tf.keras.layers
 
@@ -26,7 +31,8 @@ WEIGHTS_HASHES = {
 
 
 def block1(x, filters, kernel_size=3, stride=1,
-           conv_shortcut=True, name=None, weight_decay=0.0001):
+           conv_shortcut=True, name=None,
+           trainable=True, weight_decay=0.0001):
     """A residual block.
 
     # Arguments
@@ -45,36 +51,40 @@ def block1(x, filters, kernel_size=3, stride=1,
     if conv_shortcut is True:
         shortcut = layers.Conv2D(4 * filters, 1, strides=stride,
                                  kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
-                                 name=name + '_0_conv')(x)
+                                 name=name + '_0_conv', trainable=trainable,
+                                 kernel_initializer='he_normal')(x)
         shortcut = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                             name=name + '_0_bn')(shortcut)
+                                             name=name + '_0_bn', trainable=False)(shortcut, training=False)
     else:
         shortcut = x
 
-    x = layers.Conv2D(filters, 1, strides=stride, name=name + '_1_conv',
-                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(x)
+    x = layers.Conv2D(filters, 1, strides=stride, name=name + '_1_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                      kernel_initializer='he_normal')(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_1_bn')(x)
+                                  name=name + '_1_bn', trainable=False)(x, training=False)
     x = layers.Activation('relu', name=name + '_1_relu')(x)
 
     x = layers.Conv2D(filters, kernel_size, padding='SAME',
-                      name=name + '_2_conv',
-                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),)(x)
+                      name=name + '_2_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                      kernel_initializer='he_normal')(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_2_bn')(x)
+                                  name=name + '_2_bn', trainable=False)(x, training=False)
     x = layers.Activation('relu', name=name + '_2_relu')(x)
 
-    x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv',
-                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(x)
+    x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                      kernel_initializer='he_normal')(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
-                                  name=name + '_3_bn')(x)
+                                  name=name + '_3_bn', trainable=False)(x, training=False)
 
     x = layers.Add(name=name + '_add')([shortcut, x])
     x = layers.Activation('relu', name=name + '_out')(x)
     return x
 
 
-def stack1(x, filters, blocks, stride1=2, name=None, weight_decay=0.0001):
+def stack1(x, filters, blocks, stride1=2, name=None, trainable=True, weight_decay=0.0001):
     """A set of stacked residual blocks.
 
     # Arguments
@@ -87,37 +97,24 @@ def stack1(x, filters, blocks, stride1=2, name=None, weight_decay=0.0001):
     # Returns
         Output tensor for the stacked blocks.
     """
-    x = block1(x, filters, stride=stride1, name=name + '_block1', weight_decay=weight_decay)
+    x = block1(x, filters, stride=stride1, name=name + '_block1',
+               trainable=trainable, weight_decay=weight_decay)
     for i in range(2, blocks + 1):
-        x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i),  weight_decay=weight_decay)
+        x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i),
+                   trainable=trainable, weight_decay=weight_decay)
     return x
 
 
-def get_fusion_layer(ci, pj, name, use_bias, top_down_dims, weight_decay=0.0001):
-    upsample_pj = layers.UpSampling2D(size=(2, 2), name='{}_upsample'.format(name))(pj)
-    reduce_dims_ci = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=use_bias,
-                                   name='{}_reduce_dims'.format(name),
-                                   kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(ci)
-    fusion = layers.Add(name='{}_fusion'.format(name))([upsample_pj, reduce_dims_ci])
-    final_output = layers.Conv2D(top_down_dims, 3, 1,
-                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
-                                 padding='same', name=name)(fusion)
-    return final_output
-
-
-def get_resnet_model(stack_fn,
-                     model_name='resnet',
-                     top_down_dims=256,
-                     weight_decay=0.0001,
-                     ):
+def get_resnet_model(stack_fn, model_name='resnet', weight_decay=0.0001):
     img_input = layers.Input(shape=(None, None, 3))
-    bn_axis = 3
 
     x = layers.ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
-    x = layers.Conv2D(64, 7, strides=2, use_bias=True, name='conv1_conv',
-                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(x)
+    x = layers.Conv2D(64, 7, strides=2, use_bias=True, name='conv1_conv', trainable=True, padding='valid',
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                      kernel_initializer='he_normal')(x)
 
-    x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name='conv1_bn')(x)
+    x = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
+                                  name='conv1_bn', trainable=False)(x, training=False)
     x = layers.Activation('relu', name='conv1_relu')(x)
 
     x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
@@ -125,17 +122,7 @@ def get_resnet_model(stack_fn,
 
     c2, c3, c4, c5 = stack_fn(x)
 
-    p5 = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=True, name='build_p5',
-                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(c5)
-    p6 = layers.MaxPooling2D(strides=2, pool_size=(1, 1), name='build_p6')(p5)
-    p4 = get_fusion_layer(c4, p5, name='build_p4', use_bias=True, top_down_dims=top_down_dims,
-                          weight_decay=weight_decay)
-    p3 = get_fusion_layer(c3, p4, name='build_p3', use_bias=True, top_down_dims=top_down_dims,
-                          weight_decay=weight_decay)
-    p2 = get_fusion_layer(c2, p3, name='build_p2', use_bias=True, top_down_dims=top_down_dims,
-                          weight_decay=weight_decay)
-
-    model = tf.keras.Model(img_input, [p2, p3, p4, p5, p6], name=model_name)
+    model = tf.keras.Model(img_input, [c2, c3, c4, c5], name=model_name)
 
     # Load weights.
     if model_name in WEIGHTS_HASHES:
@@ -151,24 +138,109 @@ def get_resnet_model(stack_fn,
     return model
 
 
+def resnet_arg_scope(
+        is_training=True, weight_decay=0.0001, batch_norm_decay=0.997,
+        batch_norm_epsilon=1e-5, batch_norm_scale=True):
+    batch_norm_params = {
+        'is_training': False, 'decay': batch_norm_decay,
+        'epsilon': batch_norm_epsilon, 'scale': batch_norm_scale,
+        'trainable': False,
+        'updates_collections': tf.GraphKeys.UPDATE_OPS
+    }
+
+    with slim.arg_scope(
+            [slim.conv2d],
+            weights_regularizer=slim.l2_regularizer(weight_decay),
+            weights_initializer=slim.variance_scaling_initializer(),
+            trainable=is_training,
+            activation_fn=tf.nn.relu,
+            normalizer_fn=slim.batch_norm,
+            normalizer_params=batch_norm_params):
+        with slim.arg_scope([slim.batch_norm], **batch_norm_params) as arg_sc:
+            return arg_sc
+
+
+def resnet_base(scope_name, is_training=True):
+    img_batch = layers.InputLayer(input_shape=(None, None, 3))
+
+    if scope_name == 'resnet_v1_50':
+        middle_num_units = 6
+    elif scope_name == 'resnet_v1_101':
+        middle_num_units = 23
+    else:
+        raise NotImplementedError('We only support resnet_v1_50 or resnet_v1_101. Check your network name....yjr')
+
+    blocks = [resnet_v1_block('block1', base_depth=64, num_units=3, stride=2),
+              resnet_v1_block('block2', base_depth=128, num_units=4, stride=2),
+              resnet_v1_block('block3', base_depth=256, num_units=middle_num_units, stride=2),
+              resnet_v1_block('block4', base_depth=512, num_units=3, stride=1)]
+
+    with slim.arg_scope(resnet_arg_scope(is_training=False)):
+        with tf.variable_scope(scope_name, scope_name):
+            # Do the first few layers manually, because 'SAME' padding can behave inconsistently
+            # for images of different sizes: sometimes 0, sometimes 1
+            net = resnet_utils.conv2d_same(
+                img_batch, 64, 7, stride=2, scope='conv1')
+            net = tf.pad(net, [[0, 0], [1, 1], [1, 1], [0, 0]])
+            net = slim.max_pool2d(
+                net, [3, 3], stride=2, padding='VALID', scope='pool1')
+
+    with slim.arg_scope(resnet_arg_scope(is_training=is_training)):
+        c2, end_points_c2 = resnet_v1.resnet_v1(net,
+                                                blocks[0:1],
+                                                global_pool=False,
+                                                include_root_block=False,
+                                                scope=scope_name)
+
+    with slim.arg_scope(resnet_arg_scope(is_training=is_training)):
+        c3, end_points_c3 = resnet_v1.resnet_v1(c2,
+                                                blocks[1:2],
+                                                global_pool=False,
+                                                include_root_block=False,
+                                                scope=scope_name)
+
+    with slim.arg_scope(resnet_arg_scope(is_training=is_training)):
+        c4, end_points_c4 = resnet_v1.resnet_v1(c3,
+                                                blocks[2:3],
+                                                global_pool=False,
+                                                include_root_block=False,
+                                                scope=scope_name)
+
+    with slim.arg_scope(resnet_arg_scope(is_training=is_training)):
+        _, end_points_c5 = resnet_v1.resnet_v1(c4,
+                                               blocks[3:4],
+                                               global_pool=False,
+                                               include_root_block=False,
+                                               scope=scope_name)
+
+    feature_dict = {'C2': end_points_c2['{}/block1/unit_2/bottleneck_v1'.format(scope_name)],
+                    'C3': end_points_c3['{}/block2/unit_3/bottleneck_v1'.format(scope_name)],
+                    'C4': end_points_c4['{}/block3/unit_{}/bottleneck_v1'.format(scope_name, middle_num_units - 1)],
+                    'C5': end_points_c5['{}/block4/unit_3/bottleneck_v1'.format(scope_name)], }
+
+    extractor = tf.keras.Model(img_batch,
+                               [feature_dict['C2'], feature_dict['C3'], feature_dict['C4'], feature_dict['C5']])
+    return extractor
+
+
 def get_resnet_v1_extractor(depth, weight_decay=0.0001):
     if depth == 50:
         def stack_fn(x):
-            c2 = stack1(x, 64, 3, stride1=1, name='conv2', weight_decay=weight_decay)
+            c2 = stack1(x, 64, 3, stride1=1, name='conv2', trainable=True, weight_decay=weight_decay)
             c3 = stack1(c2, 128, 4, name='conv3', weight_decay=weight_decay)
             c4 = stack1(c3, 256, 6, name='conv4', weight_decay=weight_decay)
             c5 = stack1(c4, 512, 3, name='conv5', weight_decay=weight_decay)
             return c2, c3, c4, c5
     elif depth == 101:
         def stack_fn(x):
-            c2 = stack1(x, 64, 3, stride1=1, name='conv2', weight_decay=weight_decay)
+            c2 = stack1(x, 64, 3, stride1=1, name='conv2', trainable=True, weight_decay=weight_decay)
             c3 = stack1(c2, 128, 4, name='conv3', weight_decay=weight_decay)
             c4 = stack1(c3, 256, 23, name='conv4', weight_decay=weight_decay)
             c5 = stack1(c4, 512, 3, name='conv5', weight_decay=weight_decay)
             return c2, c3, c4, c5
     elif depth == 152:
         def stack_fn(x):
-            c2 = stack1(x, 64, 3, stride1=1, name='conv2', weight_decay=weight_decay)
+            c2 = stack1(x, 64, 3, stride1=1, name='conv2', trainable=True, weight_decay=weight_decay)
             c3 = stack1(c2, 128, 8, name='conv3', weight_decay=weight_decay)
             c4 = stack1(c3, 256, 36, name='conv4', weight_decay=weight_decay)
             c5 = stack1(c4, 512, 3, name='conv5', weight_decay=weight_decay)
@@ -178,7 +250,7 @@ def get_resnet_v1_extractor(depth, weight_decay=0.0001):
 
     return get_resnet_model(stack_fn,
                             model_name='resnet{}'.format(depth),
-                            top_down_dims=256, weight_decay=weight_decay)
+                            weight_decay=weight_decay)
 
 
 class ResnetRoiHead(tf.keras.Model):
@@ -219,13 +291,84 @@ class ResnetRoiHead(tf.keras.Model):
         """
         x = self._flatten_layer(inputs)
         x = self._fc1(x)
-        x = self._dropout1(x, training)
+        # x = self._dropout1(x, training)
         x = self._fc2(x)
-        x = self._dropout2(x, training)
+        # x = self._dropout2(x, training)
         score = self._score_layer(x)
         bboxes = self._roi_bboxes_layer(x)
 
         return score, bboxes
+
+
+class ResnetFpnNeck(tf.keras.Model):
+    def __init__(self, top_down_dims=256, weight_decay=0.0001, use_bias=True):
+        super().__init__()
+
+        self._build_p5_conv = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=use_bias, name='build_p5',
+                                            kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                            kernel_initializer='he_normal')
+        self._build_p6_max_pooling = layers.MaxPooling2D(strides=2, pool_size=(1, 1), name='build_p6')
+
+        self._build_p4_reduce_dims = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=use_bias,
+                                                   name='build_p4_reduce_dims',
+                                                   kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                                   kernel_initializer='he_normal')
+        self._build_p4_fusion = layers.Add(name='build_p4_fusion')
+        self._build_p4 = layers.Conv2D(top_down_dims, 3, 1, use_bias=use_bias,
+                                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                       padding='same', name='build_p4',
+                                       kernel_initializer='he_normal')
+
+        self._build_p3_reduce_dims = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=use_bias,
+                                                   name='build_p3_reduce_dims',
+                                                   kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                                   kernel_initializer='he_normal')
+        self._build_p3_fusion = layers.Add(name='build_p3_fusion')
+        self._build_p3 = layers.Conv2D(top_down_dims, 3, 1, use_bias=use_bias,
+                                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                       padding='same', name='build_p3',
+                                       kernel_initializer='he_normal')
+
+        self._build_p2_reduce_dims = layers.Conv2D(top_down_dims, 1, strides=1, use_bias=use_bias,
+                                                   name='build_p2_reduce_dims',
+                                                   kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                                   kernel_initializer='he_normal')
+        self._build_p2_fusion = layers.Add(name='build_p2_fusion')
+        self._build_p2 = layers.Conv2D(top_down_dims, 3, 1, use_bias=use_bias,
+                                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                       padding='same', name='build_p2',
+                                       kernel_initializer='he_normal')
+
+    def call(self, inputs, training=None, mask=None):
+        c2, c3, c4, c5 = inputs
+
+        # build p5 & p6
+        p5 = self._build_p5_conv(c5)
+        p6 = self._build_p6_max_pooling(p5)
+
+        # build p4
+        h, w = tf.shape(c4)[1], tf.shape(c4)[2]
+        upsample_p5 = tf.image.resize_bilinear(p5, (h, w), name='build_p4_resize')
+        reduce_dims_c4 = self._build_p4_reduce_dims(c4)
+        p4 = self._build_p4_fusion([upsample_p5 * 0.5, reduce_dims_c4 * 0.5])
+
+        # build p3
+        h, w = tf.shape(c3)[1], tf.shape(c3)[2]
+        upsample_p4 = tf.image.resize_bilinear(p4, (h, w), name='build_p3_resize')
+        reduce_dims_c3 = self._build_p3_reduce_dims(c3)
+        p3 = self._build_p3_fusion([upsample_p4 * 0.5, reduce_dims_c3 * 0.5])
+
+        # build p2
+        h, w = tf.shape(c2)[1], tf.shape(c2)[2]
+        upsample_p3 = tf.image.resize_bilinear(p3, (h, w), name='build_p2_resize')
+        reduce_dims_c2 = self._build_p2_reduce_dims(c2)
+        p2 = self._build_p2_fusion([upsample_p3 * 0.5, reduce_dims_c2 * 0.5])
+
+        p4 = self._build_p4(p4)
+        p3 = self._build_p3(p3)
+        p2 = self._build_p2(p2)
+
+        return p2, p3, p4, p5, p6
 
 
 class ResnetV1Fpn(BaseFPN):
@@ -242,6 +385,7 @@ class ResnetV1Fpn(BaseFPN):
                  level_name_list=('p2', 'p3', 'p4', 'p5', 'p6'),
                  min_level=2,
                  max_level=5,
+                 top_down_dims=256,
 
                  # fpn 中 anchors 特有参数
                  anchor_stride_list=(4, 8, 16, 32, 64),
@@ -273,6 +417,7 @@ class ResnetV1Fpn(BaseFPN):
 
                  # roi pooling 参数
                  roi_pool_size=7,
+                 roi_pooling_max_pooling_flag=True,
 
                  # proposal target 以及相关损失函数参数
                  roi_sigma=1,
@@ -289,6 +434,7 @@ class ResnetV1Fpn(BaseFPN):
                  ):
         self._depth = depth
         self._roi_head_keep_dropout_rate = roi_head_keep_dropout_rate
+        self._top_down_dims = top_down_dims
         super().__init__(
             roi_feature_size=roi_feature_size,
             num_classes=num_classes,
@@ -329,6 +475,7 @@ class ResnetV1Fpn(BaseFPN):
 
             # roi pooling 参数
             roi_pool_size=roi_pool_size,
+            roi_pooling_max_pooling_flag=roi_pooling_max_pooling_flag,
 
             # proposal target 以及相关损失函数参数
             roi_sigma=roi_sigma,
@@ -353,3 +500,157 @@ class ResnetV1Fpn(BaseFPN):
 
     def _get_extractor(self):
         return get_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)
+
+    def _get_neck(self):
+        return ResnetFpnNeck(top_down_dims=self._top_down_dims, weight_decay=self.weight_decay)
+
+    def load_fpn_tensorflow_resnet50_weights(self, ckpt_file_path):
+        reader = tf.train.load_checkpoint(ckpt_file_path)
+
+        extractor = self.get_layer('resnet50')
+        extractor_dict = {
+            "resnet_v1_50/conv1/": "conv1_conv",
+            "resnet_v1_50/conv1/BatchNorm/": "conv1_bn",
+
+            "resnet_v1_50/block4/unit_1/bottleneck_v1/shortcut/": "conv5_block1_0_conv",
+            "resnet_v1_50/block4/unit_1/bottleneck_v1/shortcut/BatchNorm/": "conv5_block1_0_bn",
+            "resnet_v1_50/block4/unit_1/bottleneck_v1/conv1/": "conv5_block1_1_conv",
+            "resnet_v1_50/block4/unit_1/bottleneck_v1/conv1/BatchNorm/": "conv5_block1_1_bn",
+            "resnet_v1_50/block4/unit_1/bottleneck_v1/conv2/": "conv5_block1_2_conv",
+            "resnet_v1_50/block4/unit_1/bottleneck_v1/conv2/BatchNorm/": "conv5_block1_2_bn",
+            "resnet_v1_50/block4/unit_1/bottleneck_v1/conv3/": "conv5_block1_3_conv",
+            "resnet_v1_50/block4/unit_1/bottleneck_v1/conv3/BatchNorm/": "conv5_block1_3_bn",
+
+            "resnet_v1_50/block4/unit_2/bottleneck_v1/conv1/": "conv5_block2_1_conv",
+            "resnet_v1_50/block4/unit_2/bottleneck_v1/conv1/BatchNorm/": "conv5_block2_1_bn",
+            "resnet_v1_50/block4/unit_2/bottleneck_v1/conv2/": "conv5_block2_2_conv",
+            "resnet_v1_50/block4/unit_2/bottleneck_v1/conv2/BatchNorm/": "conv5_block2_2_bn",
+            "resnet_v1_50/block4/unit_2/bottleneck_v1/conv3/": "conv5_block2_3_conv",
+            "resnet_v1_50/block4/unit_2/bottleneck_v1/conv3/BatchNorm/": "conv5_block2_3_bn",
+
+            "resnet_v1_50/block4/unit_3/bottleneck_v1/conv1/": "conv5_block3_1_conv",
+            "resnet_v1_50/block4/unit_3/bottleneck_v1/conv1/BatchNorm/": "conv5_block3_1_bn",
+            "resnet_v1_50/block4/unit_3/bottleneck_v1/conv2/": "conv5_block3_2_conv",
+            "resnet_v1_50/block4/unit_3/bottleneck_v1/conv2/BatchNorm/": "conv5_block3_2_bn",
+            "resnet_v1_50/block4/unit_3/bottleneck_v1/conv3/": "conv5_block3_3_conv",
+            "resnet_v1_50/block4/unit_3/bottleneck_v1/conv3/BatchNorm/": "conv5_block3_3_bn",
+        }
+
+        keras_format = '{}_{}_{}_{}'  # conv5_block1_0_bn
+        ckpt_format = 'resnet_v1_50/{}/{}/bottleneck_v1/{}/{}'  # resnet_v1_50/block3/unit_1/bottleneck_v1/conv3/
+
+        # block1 - unit_1 - shortcut
+        # conv2 - block1 - 0
+        extractor_dict[ckpt_format.format('block1', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv2',
+                                                                                                               'block1',
+                                                                                                               0, 'bn')
+        extractor_dict[ckpt_format.format('block1', 'unit_1', 'shortcut', '')] = keras_format.format('conv2', 'block1',
+                                                                                                     0, 'conv')
+        # block1 - unit_1-3 - conv1-3
+        # conv2 - block1-3 - 1-3
+        for i in range(1, 4):
+            for j in range(1, 4):
+                key = ckpt_format.format('block1', 'unit_%d' % i, 'conv%d' % j, '')
+                value = keras_format.format('conv2', 'block%d' % i, j, 'conv')
+                extractor_dict[key] = value
+                key = ckpt_format.format('block1', 'unit_%d' % i, 'conv%d' % j, 'BatchNorm/')
+                value = keras_format.format('conv2', 'block%d' % i, j, 'bn')
+                extractor_dict[key] = value
+
+        # block2 - unit_1 - shortcut
+        # conv3 block1 0
+        extractor_dict[ckpt_format.format('block2', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv3',
+                                                                                                               'block1',
+                                                                                                               0, 'bn')
+        extractor_dict[ckpt_format.format('block2', 'unit_1', 'shortcut', '')] = keras_format.format('conv3', 'block1',
+                                                                                                     0, 'conv')
+        # block2 unit_1-4 conv1-3
+        # conv3 block1-4 1-3
+        for i in range(1, 5):
+            for j in range(1, 4):
+                key = ckpt_format.format('block2', 'unit_%d' % i, 'conv%d' % j, '')
+                value = keras_format.format('conv3', 'block%d' % i, j, 'conv')
+                extractor_dict[key] = value
+                key = ckpt_format.format('block2', 'unit_%d' % i, 'conv%d' % j, 'BatchNorm/')
+                value = keras_format.format('conv3', 'block%d' % i, j, 'bn')
+                extractor_dict[key] = value
+
+        # block3 - unit_1 - shortcut
+        # conv4 block1 0
+        extractor_dict[ckpt_format.format('block3', 'unit_1', 'shortcut', 'BatchNorm/')] = keras_format.format('conv4',
+                                                                                                               'block1',
+                                                                                                               0, 'bn')
+        extractor_dict[ckpt_format.format('block3', 'unit_1', 'shortcut', '')] = keras_format.format('conv4', 'block1',
+                                                                                                     0, 'conv')
+        # block3 unit_1-6 conv1-3
+        # conv4 block1-6 1-3
+        for i in range(1, 6):
+            for j in range(1, 4):
+                key = ckpt_format.format('block3', 'unit_%d' % i, 'conv%d' % j, '')
+                value = keras_format.format('conv4', 'block%d' % i, j, 'conv')
+                extractor_dict[key] = value
+                key = ckpt_format.format('block3', 'unit_%d' % i, 'conv%d' % j, 'BatchNorm/')
+                value = keras_format.format('conv4', 'block%d' % i, j, 'bn')
+                extractor_dict[key] = value
+
+        for tf_faster_rcnn_name_pre in extractor_dict.keys():
+            if 'BatchNorm' in tf_faster_rcnn_name_pre:
+                cur_weights = [
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'gamma'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'beta'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_mean'),
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'moving_variance'),
+                ]
+            else:
+                cur_weights = [
+                    reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                    np.zeros(extractor.get_layer(name=extractor_dict[tf_faster_rcnn_name_pre]).variables[-1].shape)
+                ]
+            extractor.get_layer(name=extractor_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
+            tf.logging.info('successfully loaded weights for {}'.format(extractor_dict[tf_faster_rcnn_name_pre]))
+
+        rpn_head = self.get_layer('rpn_head')
+        rpn_head_dict = {
+            "build_rpn/rpn_conv/3x3/": "rpn_first_conv",
+            "build_rpn/rpn_cls_score/": "rpn_score_conv",
+            "build_rpn/rpn_bbox_pred/": "rpn_bbox_conv",
+        }
+        for tf_faster_rcnn_name_pre in rpn_head_dict.keys():
+            rpn_head.get_layer(name=rpn_head_dict[tf_faster_rcnn_name_pre]).set_weights([
+                reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                reader.get_tensor(tf_faster_rcnn_name_pre + 'biases'),
+            ])
+            tf.logging.info('successfully loaded weights for {}'.format(rpn_head_dict[tf_faster_rcnn_name_pre]))
+
+        roi_head = self.get_layer('resnet_roi_head')
+        roi_head_dict = {
+            "Fast-RCNN/build_fc_layers/fc1/": "fc1",
+            "Fast-RCNN/build_fc_layers/fc2/": "fc2",
+            "Fast-RCNN/cls_fc/": "roi_head_score",
+            "Fast-RCNN/reg_fc/": "roi_head_bboxes",
+        }
+        for tf_faster_rcnn_name_pre in roi_head_dict.keys():
+            cur_weights = [
+                reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                reader.get_tensor(tf_faster_rcnn_name_pre + 'biases'),
+            ]
+            roi_head.get_layer(name=roi_head_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
+            tf.logging.info('successfully loaded weights for {}'.format(roi_head_dict[tf_faster_rcnn_name_pre]))
+
+        fpn_neck = self.get_layer('resnet_fpn_neck')
+        fpn_neck_dict = {
+            "build_pyramid/build_P5/": "build_p5",
+            "build_pyramid/build_P4/reduce_dim_P4/": "build_p4_reduce_dims",
+            "build_pyramid/fuse_P4/": "build_p4",
+            "build_pyramid/build_P3/reduce_dim_P3/": "build_p3_reduce_dims",
+            "build_pyramid/fuse_P3/": "build_p3",
+            "build_pyramid/build_P2/reduce_dim_P2/": "build_p2_reduce_dims",
+            "build_pyramid/fuse_P2/": "build_p2",
+        }
+        for tf_faster_rcnn_name_pre in fpn_neck_dict.keys():
+            cur_weights = [
+                reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
+                reader.get_tensor(tf_faster_rcnn_name_pre + 'biases'),
+            ]
+            fpn_neck.get_layer(name=fpn_neck_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
+            tf.logging.info('successfully loaded weights for {}'.format(fpn_neck_dict[tf_faster_rcnn_name_pre]))

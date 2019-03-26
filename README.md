@@ -73,8 +73,9 @@
 ### 3.1. VGG16-Faster-RCNN
 + load tf-faster-rcnn pre-trained model，mAP of pascal 2007 test set is 0.71。
 + end-to-end training：load slim pretrained model (`logs-pascal-slim`):
-    + SGD，1e-3 -> 1e-4: after 14 epochs, mAP is 0.6935(or 0.6869).
-    + SGD，1e-3 -> 1e-4: without data argument: after 14 epochs, mAP is 0.6659.
+    + 0.6935(or 0.6869).
+    + without data argument: after 14 epochs, mAP is 0.6659.
+    + double bias: 0.6786
 + alt training：load slim pretrained model
     + Step 1: training extractor & rpn head(rpn loss, 14 epochs, no l2 loss, `logs-pascal-slim-rpn`)
     + Step 2: training roi head & roi pooling(roi loss, 14 epochs, `logs-pascal-slim-roi-after-rpn`)
@@ -86,11 +87,12 @@
     + train tf-faster-rcnn resnet101 by myself: 0.7393.
     + load official tf-faster-rcnn pre-trained model, mAP of pascal 2007 test set:
         + standard: 0.7566
-        + set height & width to 32x: 0.7218
     + end to end training: load keras pre-trained model(`logs-pascal-resnet101-default`):
-        + fixed image, without max pooling, proposal target random choice: 0.7276(0.7267)
-        + fixed image, without max pooling, proposal target random choice: 00.7249(0.7259)
-        + fixed image, max pooling, proposal target random choice: 0.7235
+        + without max pooling, proposal target 0.1 - 0.5: 0.7276, 0.7249
+        + max pooling, proposal target 0.1 - 0.5: 0.7235
+        + without max pooling, proposal target 0. - 0.5: 0.7456
+        + without max pooling, proposal target 0. - 0.5, fix double bias: 0.7296
+        + without max pooling, proposal target 0. - 0.5, no bias: 0.7307, 0.7270
 
 ## 4. 可有可无的教程……
 + training on pascal voc 2007 trainval set, evaluating on pascal voc 2007 test set.

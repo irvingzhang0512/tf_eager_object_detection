@@ -2,7 +2,44 @@ import tensorflow as tf
 
 layers = tf.keras.layers
 
-__all__ = ['RoiPoolingCropAndResize', 'RoiPoolingRoiAlign']
+__all__ = ['RoiPoolingCropAndResize', 'RoiPoolingRoiAlign', 'RoiPoolingCropAndResize2']
+
+
+class RoiPoolingCropAndResize2(tf.keras.Model):
+    def __init__(self, pool_size):
+        super().__init__()
+        self._pool_size = pool_size
+        self._concat_layer = layers.Concatenate(axis=0)
+        self._max_pool = layers.MaxPooling2D(padding='same')
+
+    def call(self, inputs, training=None, mask=None):
+        """
+        输入 backbone 的结果和 rpn proposals 的结果(即 RegionProosal 的输出)
+        输出 roi pooloing 的结果，即在特征图上，对每个rpn proposal获取一个固定尺寸的特征图
+        :param inputs:
+        :param training:
+        :param mask:
+        :return:
+        """
+        # [1, height, width, channels]  [num_rois, 4]
+        shared_layers, rois, image_shape = inputs
+        h, w = tf.to_float(image_shape[0]), tf.to_float(image_shape[1])
+
+        batch_ids = tf.zeros([tf.shape(rois)[0]], dtype=tf.int32)
+        roi_channels = tf.split(rois, 4, axis=1)
+        bboxes = tf.concat([
+            roi_channels[1] / tf.to_float(h),
+            roi_channels[0] / tf.to_float(w),
+            roi_channels[3] / tf.to_float(h),
+            roi_channels[2] / tf.to_float(w),
+        ], axis=1)
+        pre_pool_size = self._pool_size * 2
+        crops = tf.image.crop_and_resize(shared_layers,
+                                         tf.stop_gradient(bboxes),
+                                         box_ind=tf.to_int32(batch_ids),
+                                         crop_size=[pre_pool_size, pre_pool_size],
+                                         name="crops")
+        return self._max_pool(crops)
 
 
 class RoiPoolingCropAndResize(tf.keras.Model):

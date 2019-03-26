@@ -36,8 +36,9 @@ def decode_bbox_with_mean_and_std(anchors, bboxes_txtytwth, target_means, target
         target_stds, dtype=tf.float32)
     delta = bboxes_txtytwth * target_stds + target_means
 
-    width = anchors[:, 2] - anchors[:, 0] + 1.0
-    height = anchors[:, 3] - anchors[:, 1] + 1.0
+    # TODO fix whether to use +1 in the following two lines.
+    width = anchors[:, 2] - anchors[:, 0]
+    height = anchors[:, 3] - anchors[:, 1]
     center_x = anchors[:, 0] + 0.5 * width
     center_y = anchors[:, 1] + 0.5 * height
 

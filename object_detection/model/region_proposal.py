@@ -48,10 +48,10 @@ class RegionProposal(tf.keras.Model):
         :param mask:
         :return:
         """
-        # [num_anchors*feature_width*feature_height, 4]
-        # [num_anchors*feature_width*feature_height, 4]
-        # [feature_width*feature_height, 2*num_anchors]
-        # [2, ]
+        # bboxes_txtytwth shape: [num_anchors*feature_width*feature_height, 4]
+        # anchors shape: [num_anchors*feature_width*feature_height, 4]
+        # scores shape: [feature_width*feature_height*num_anchors,]
+        # image_shape shape: [2, ]
         bboxes_txtytwth, anchors, scores, image_shape = inputs
 
         # 1. 使用anchors使用rpn_pred修正，获取所有预测结果。
@@ -62,18 +62,11 @@ class RegionProposal(tf.keras.Model):
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, _ = bboxes_clip_filter(decoded_bboxes, 0, image_shape[0], image_shape[1])
 
-        # 这里这么复杂，主要是与tf-faster-rcnn对应……
-        scores = tf.reshape(tf.transpose(tf.reshape(scores, [-1, 2, self._num_anchors]), [0, 2, 1]), [-1, 2])
-        scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
-        scores = tf.reshape(scores, [-1, 2 * self._num_anchors])
-        scores = tf.reshape(scores[..., self._num_anchors:], [-1])
-
         # 3. 根据rpn_score获取num_pre_nms个anchors。
         num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
         cur_top_k = tf.minimum(num_pre_nms, tf.size(scores))
-        _, selected_idx = tf.nn.top_k(scores, k=cur_top_k, sorted=False)
+        scores, selected_idx = tf.nn.top_k(scores, k=cur_top_k, sorted=False)
         decoded_bboxes = tf.gather(decoded_bboxes, selected_idx)
-        scores = tf.gather(scores, selected_idx)
 
         # 4. 进行nms。
         # 5. 根据rpn_score排序，获取num_post_nms个anchors作为proposal结果。
