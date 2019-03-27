@@ -165,14 +165,16 @@ def parse_args():
     parser.add_argument('--gpu_id', type=str, default='0')
     parser.add_argument('--model', type=str, default='resnet50', help='one of [resnet50, resnet101, resnet152]')
     parser.add_argument('--use_local_result_files', default=False, type=bool)
+    parser.add_argument('--use_fpn_tensorflow_model', default=False, type=bool)
     parser.add_argument('--dataset_type', help='type of dataset, cv2 or tf',
                         default='cv2', type=str)
-    #     parser.add_argument('--root_path', help='path to pascal voc 2007',
-    #                         default='D:\\data\\VOCdevkit\\VOC2007', type=str)
-    #     parser.add_argument('--result_file_format', help='local detection result file pattern',
-    #                         default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
-    #     parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
-    #                         default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
+
+    # parser.add_argument('--root_path', help='path to pascal voc 2007',
+    #                     default='D:\\data\\VOCdevkit\\VOC2007', type=str)
+    # parser.add_argument('--result_file_format', help='local detection result file pattern',
+    #                     default='D:\\data\\VOCdevkit\\VOC2007\\results\\{:s}.txt', type=str)
+    # parser.add_argument('--annotation_cache_dir', help='path to save annotation cache pickle file',
+    #                     default='D:\\data\\VOCdevkit\\VOC2007\\results', type=str)
 
     parser.add_argument('--root_path', help='path to pascal voc 2007',
                         default='/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/VOC2007', type=str)
@@ -216,9 +218,19 @@ def main(args):
         raise ValueError('unknown model {}'.format(args.model))
 
     # 重大BUG，如果没有这一步操作，下一步的 model.variables 中就不包括 rpn_head 的内容
-    cur_model(tf.to_float(np.random.rand(1, 1024, 1024, 3)), False)
+    cur_model(tf.to_float(np.random.rand(1, 600, 800, 3)), False)
 
-    _load_from_ckpt_file(cur_model, args.ckpt_file_path)
+    if args.use_fpn_tensorflow_model:
+        cur_model.load_fpn_tensorflow_weights(args.ckpt_file_path)
+    else:
+        saver = eager_saver.Saver(cur_model.variables)
+        for var in cur_model.variables:
+            tf.logging.info('restore var {}'.format(var.name))
+        if tf.train.latest_checkpoint(args.ckpt_file_path) is not None:
+            saver.restore(tf.train.latest_checkpoint(args.ckpt_file_path))
+        else:
+            raise ValueError('unknown ckpt file {}'.format(args.ckpt_file_path))
+
     eval_from_scratch(cur_model,
                       preprocessing_type=preprocessing_type,
                       dataset_type=args.dataset_type,

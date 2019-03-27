@@ -8,19 +8,22 @@ from functools import partial
 __all__ = ['get_dataset_by_tf_records', 'get_dataset_by_local_file']
 
 
-def get_dataset_by_local_file(mode, root_path,
+def get_dataset_by_local_file(mode, root_path, image_format='bgr',
                               preprocessing_type='caffe', caffe_pixel_means=None,
                               min_edge=600, max_edge=1000):
     """
     根据 /path/to/VOC2007 or VOC2012/ImageSets/Main/{}.txt 读取图片列表，读取图片
-    :param mode: 
-    :param root_path: 
+    :param mode:
+    :param root_path:
+    :param image_format:
     :param caffe_pixel_means: 
     :param preprocessing_type:
     :param min_edge: 
     :param max_edge: 
     :return: 
     """
+    if image_format not in ['rgb', 'bgr']:
+        raise ValueError('unknown image format {}'.format(image_format))
     with open(os.path.join(root_path, 'ImageSets', 'Main', '%s.txt' % mode), 'r') as f:
         lines = f.readlines()
     examples_list = [line.strip() for line in lines]
@@ -44,13 +47,15 @@ def get_dataset_by_local_file(mode, root_path,
         new_w = int(scale * w)
 
         img = cv2.resize(img, (new_w, new_h))
+        if image_format == 'rgb':
+            img = img[..., ::-1]
         return img, float(scale), h, w
 
     dataset = tf.data.Dataset.from_tensor_slices(examples_list).map(
         lambda example: tf.py_func(_map_from_cv2,
                                    [example],
-                                   [tf.float32, tf.float64, tf.int64, tf.int64]
-                                   # [tf.float32, tf.float64, tf.int32, tf.int32]
+                                   # [tf.float32, tf.float64, tf.int64, tf.int64]
+                                   [tf.float32, tf.float64, tf.int32, tf.int32]
                                    )
     ).batch(1)
 

@@ -94,6 +94,10 @@
         + without max pooling, proposal target 0. - 0.5, fix double bias: 0.7296
         + without max pooling, proposal target 0. - 0.5, no bias: 0.7307, 0.7270
 
+### 3.3. FPN-Tensorflow
++ resnet 50
+    + load official FPN_Tensorflow pre-trained model: mAP of pascal 2007 test set is 0.7430
+
 ## 4. 可有可无的教程……
 + training on pascal voc 2007 trainval set, evaluating on pascal voc 2007 test set.
 + Step 0: generate python protos by `protoc ./object_detection/protos/*.proto --python_out=./object_detection/protos/ `.

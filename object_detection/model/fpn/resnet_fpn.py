@@ -539,7 +539,7 @@ class ResnetV1Fpn(BaseFPN):
     def _get_neck(self):
         return ResnetFpnNeck(top_down_dims=self._top_down_dims, weight_decay=self.weight_decay)
 
-    def load_fpn_tensorflow_resnet50_weights(self, ckpt_file_path):
+    def load_fpn_tensorflow_weights(self, ckpt_file_path):
         reader = tf.train.load_checkpoint(ckpt_file_path)
         var_num = 0
 

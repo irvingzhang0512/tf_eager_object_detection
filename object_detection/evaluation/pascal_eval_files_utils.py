@@ -17,7 +17,7 @@ __all__ = ['get_prediction_files']
 
 
 def get_prediction_files(cur_model,
-                         dataset_type='tf',
+                         dataset_type='tf', image_format='bgr',
                          preprocessing_type='caffe', caffe_pixel_means=None,
                          min_edge=600, max_edge=1000,
                          data_root_path='/home/tensorflow05/data/VOCdevkit/VOC2007',
@@ -29,12 +29,13 @@ def get_prediction_files(cur_model,
                          min_size=10):
     """
     使用模型，生成预测结果文件
-    :param min_edge:
-    :param max_edge:
-    :param caffe_pixel_means:
-    :param preprocessing_type:
     :param cur_model:                   已导入pre-trained model的模型
     :param dataset_type:                预测数据集类型，有 cv 和 tf 两个选项
+    :param image_format:
+    :param caffe_pixel_means:
+    :param preprocessing_type:
+    :param min_edge:
+    :param max_edge:
     :param data_root_path:              数据集所在位置
     :param mode:                        需要预测的数据集类型，train val trainval test
     :param result_file_format:          `result_file_format.format(class_name)` 就是对应类型输出结果文件具体路径
@@ -47,8 +48,12 @@ def get_prediction_files(cur_model,
     :param min_size:                    最终结果最小边长（像素）
     :return:
     """
+    if image_format not in ['bgr', 'rgb']:
+        raise ValueError('unknown image format {}'.format(image_format))
+
     if dataset_type == 'cv2':
         eval_dataset, image_sets = get_dataset_by_local_file(mode, data_root_path,
+                                                             image_format=image_format,
                                                              preprocessing_type=preprocessing_type,
                                                              caffe_pixel_means=caffe_pixel_means,
                                                              min_edge=min_edge, max_edge=max_edge)

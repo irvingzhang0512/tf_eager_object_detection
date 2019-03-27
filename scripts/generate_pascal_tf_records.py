@@ -46,7 +46,7 @@ def _get_tf_example(xml_dict, label_map_dict, image_path):
 
 def main(args):
     writers = dataset_utils.get_multi_tf_record_writers(base_path=args.writer_base_path,
-                                                        file_pattern=args.writer_file_patther,
+                                                        file_pattern=args.writer_file_pattern,
                                                         year=args.year,
                                                         number=args.writers_number,
                                                         mode=args.mode)
@@ -90,9 +90,10 @@ def _parse_arguments(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default="trainval")
     parser.add_argument('--year', type=str, default="2007", help="one of [2007, 2012, 0712]")
-    parser.add_argument('--writer_file_patther', type=str, default='pascal_%s_%s_%02d.tfrecords',
+    parser.add_argument('--writer_file_pattern', type=str, default='pascal_%s_%s_%02d.tfrecords',
                         help='tf records output file name pattern')
-    parser.add_argument('--writers_number', type=int, default=1, help='split tf records into several files.')
+    parser.add_argument('--writers_number', type=int, default=5, help='split tf records into several files.')
+
     parser.add_argument('--writer_base_path', type=str, default="/path/to/tf_eager_records",
                         help='path to save generated tf record files.')
     parser.add_argument('--label_map_path', type=str,
