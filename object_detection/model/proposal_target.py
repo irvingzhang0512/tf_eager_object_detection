@@ -70,6 +70,8 @@ class ProposalTarget(tf.keras.Model):
         if tf.size(bg_inds) > self._total_num_samples - tf.size(fg_inds):
             # 如果bg sample的数量多于要求值，则随机筛选
             bg_inds = tf.random_shuffle(bg_inds)[:(self._total_num_samples - tf.size(fg_inds))]
+        elif tf.size(bg_inds).numpy() == (self._total_num_samples - tf.size(fg_inds)).numpy():
+            pass
         else:
             # 如果bg sample的数量少于要求数值，则重复获取
             target_size = (self._total_num_samples - tf.size(fg_inds)).numpy()

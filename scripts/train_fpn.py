@@ -15,7 +15,7 @@ from tensorflow.python.platform import tf_logging
 from tqdm import tqdm
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-tf_logging.set_verbosity(tf_logging.DEBUG)
+tf_logging.set_verbosity(tf_logging.INFO)
 
 CONFIG = None
 
@@ -219,10 +219,6 @@ def train(training_dataset, base_model, optimizer,
           ckpt_dir,
           restore_ckpt_file_path,
           ):
-    # 重大bug……
-    # 如果没有进行这步操作，keras模型中rpn head的参数并没有初始化，不存在于后续 base_model.variables 中
-    base_model(tf.to_float(np.random.rand(1, 1024, 1024, 3)), False)
-
     # 获取 pretrained model
     saver = eager_saver.Saver(base_model.variables)
 
@@ -272,7 +268,7 @@ def parse_args():
     parser.add_argument('--data_root_path', type=str, help='if data_type is pascal: path to save tf record files',
                         default="/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records")
     parser.add_argument('--logs_dir', type=str, help='path to save ckpt files and tensorboard summaries.',
-                        default="/ssd/zhangyiyang/test/tf_eager_object_detection/logs")
+                        default="/ssd/zhangyiyang/tf_eager_object_detection/logs")
     parser.add_argument('--logs_name', type=str, default='default',
                         help='logs dir name pattern is `logs-fpn-{data_type}-{model}-{logs_name}`', )
 
@@ -309,6 +305,10 @@ def main(args):
         preprocessing_type = 'caffe'
     else:
         raise ValueError('unknown model {}'.format(args.model))
+
+    # 重大bug……
+    # 如果没有进行这步操作，keras模型中rpn head的参数并没有初始化，不存在于后续 base_model.variables 中
+    cur_model(tf.to_float(np.random.rand(1, 600, 800, 3)), False)
 
     # logs-{data_type}-{model}-{logs_name}
     logs_name_pattern = 'logs-fpn-{}-{}-{}'

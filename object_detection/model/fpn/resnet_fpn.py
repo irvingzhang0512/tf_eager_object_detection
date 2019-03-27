@@ -1,10 +1,6 @@
 import tensorflow as tf
 import numpy as np
 from object_detection.model.fpn.base_fpn_model import BaseFPN
-import tensorflow.contrib.slim as slim
-from tensorflow.contrib.slim.nets import resnet_v1
-from tensorflow.contrib.slim.nets import resnet_utils
-from tensorflow.contrib.slim.python.slim.nets.resnet_v1 import resnet_v1_block
 
 layers = tf.keras.layers
 
@@ -28,6 +24,129 @@ WEIGHTS_HASHES = {
     'resnext101': ('34fb605428fcc7aa4d62f44404c11509',
                    '0f678c91647380debd923963594981b3')
 }
+
+
+def slim_bottleneck(x, filters, kernel_size=3, stride=1, name=None, trainable=True, weight_decay=0.0001):
+    in_depth = x.shape[3]
+    if filters * 4 == in_depth:
+        if stride == 1:
+            shortcut = x
+        else:
+            shortcut = layers.MaxPooling2D(pool_size=(1, 1), strides=(stride, stride), padding='valid',
+                                           name=name + '_0_max_pooling')(x)
+    else:
+        shortcut = layers.Conv2D(4 * filters, 1, strides=stride,
+                                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                                 name=name + '_0_conv', trainable=trainable,
+                                 kernel_initializer='he_normal')(x)
+        shortcut = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
+                                             name=name + '_0_bn', trainable=False)(shortcut, training=False)
+
+    x = layers.Conv2D(filters, 1, name=name + '_1_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                      kernel_initializer='he_normal')(x)
+    x = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
+                                  name=name + '_1_bn', trainable=False)(x, training=False)
+    x = layers.Activation('relu', name=name + '_1_relu')(x)
+
+    # x = layers.Conv2D(filters, kernel_size, strides=stride, padding='SAME',
+    #                   name=name + '_2_conv', trainable=trainable,
+    #                   kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+    #                   kernel_initializer='he_normal')(x)
+    pad_total = kernel_size - 1
+    pad_beg = pad_total // 2
+    pad_end = pad_total - pad_beg
+    x = layers.ZeroPadding2D([[pad_beg, pad_end], [pad_beg, pad_end]])(x)
+    x = layers.Conv2D(filters, kernel_size, strides=stride, padding='VALID',
+                      name=name + '_2_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                      kernel_initializer='he_normal')(x)
+    x = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
+                                  name=name + '_2_bn', trainable=False)(x, training=False)
+    x = layers.Activation('relu', name=name + '_2_relu')(x)
+
+    x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv', trainable=trainable,
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                      kernel_initializer='he_normal')(x)
+    x = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
+                                  name=name + '_3_bn', trainable=False)(x, training=False)
+
+    x = layers.Add(name=name + '_add')([shortcut, x])
+    x = layers.Activation('relu', name=name + '_out')(x)
+    return x
+
+
+def slim_stack(x, filters, blocks, stride=2, name=None, trainable=True, weight_decay=0.0001):
+    """A set of stacked residual blocks.
+
+    # Arguments
+        x: input tensor.
+        filters: integer, filters of the bottleneck layer in a block.
+        blocks: integer, blocks in the stacked blocks.
+        stride1: default 2, stride of the first layer in the first block.
+        name: string, stack label.
+
+    # Returns
+        Output tensor for the stacked blocks.
+    """
+    for i in range(1, blocks):
+        x = slim_bottleneck(x, filters, trainable=trainable, weight_decay=weight_decay,
+                                                           name=name + '_block' + str(i))
+    final_x = slim_bottleneck(x, filters, stride=stride, trainable=trainable,
+                                                             weight_decay=weight_decay,
+                                                             name=name + '_block' + str(blocks))
+    return x, final_x
+
+
+def get_slim_resnet_model(stack_fn, model_name='resnet', weight_decay=0.0001):
+    img_input = layers.Input(shape=(None, None, 3))
+
+    x = layers.ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
+    x = layers.Conv2D(64, 7, strides=2, use_bias=True, name='conv1_conv', trainable=True, padding='valid',
+                      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                      kernel_initializer='he_normal')(x)
+    x = layers.BatchNormalization(axis=3, epsilon=1.001e-5,
+                                  name='conv1_bn', trainable=False)(x, training=False)
+    x = layers.Activation('relu', name='conv1_relu')(x)
+
+    x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
+    x = layers.MaxPooling2D(3, strides=2, name='pool1_pool')(x)
+
+    res = stack_fn(x)
+
+    model = tf.keras.Model(img_input, res, name=model_name)
+
+    return model
+
+
+def get_slim_resnet_v1_extractor(depth, weight_decay=0.0001):
+    if depth == 50:
+        def stack_fn(x):
+            c2, c2_final = slim_stack(x, 64, 3, name='conv2', trainable=True, weight_decay=weight_decay)
+            c3, c3_final = slim_stack(c2_final, 128, 4, name='conv3', weight_decay=weight_decay)
+            c4, c4_final = slim_stack(c3_final, 256, 6, name='conv4', weight_decay=weight_decay)
+            c5, c5_final = slim_stack(c4_final, 512, 3, stride=1, name='conv5', weight_decay=weight_decay)
+            return c2, c3, c4, c5_final
+    elif depth == 101:
+        def stack_fn(x):
+            c2, c2_final = slim_stack(x, 64, 3, name='conv2', trainable=True, weight_decay=weight_decay)
+            c3, c3_final = slim_stack(c2, 128, 4, name='conv3', weight_decay=weight_decay)
+            c4, c4_final = slim_stack(c3, 256, 23, name='conv4', weight_decay=weight_decay)
+            c5, c5_final = slim_stack(c4, 512, 3, stride=1, name='conv5', weight_decay=weight_decay)
+            return c2, c3, c4, c5_final
+    elif depth == 152:
+        def stack_fn(x):
+            c2, c2_final = slim_stack(x, 64, 3, name='conv2', trainable=True, weight_decay=weight_decay)
+            c3, c3_final = slim_stack(c2, 128, 8, name='conv3', weight_decay=weight_decay)
+            c4, c4_final = slim_stack(c3, 256, 36, name='conv4', weight_decay=weight_decay)
+            c5, c5_final = slim_stack(c4, 512, 3, stride=1, name='conv5', weight_decay=weight_decay)
+            return c2, c3, c4, c5_final
+    else:
+        raise ValueError('unknown depth {}'.format(depth))
+
+    return get_slim_resnet_model(stack_fn,
+                                 model_name='resnet{}'.format(depth),
+                                 weight_decay=weight_decay)
 
 
 def block1(x, filters, kernel_size=3, stride=1,
@@ -136,91 +255,6 @@ def get_resnet_model(stack_fn, model_name='resnet', weight_decay=0.0001):
         tf.logging.info('successfully load keras pre-trained weights for {} extractor'.format(model_name))
 
     return model
-
-
-def resnet_arg_scope(
-        is_training=True, weight_decay=0.0001, batch_norm_decay=0.997,
-        batch_norm_epsilon=1e-5, batch_norm_scale=True):
-    batch_norm_params = {
-        'is_training': False, 'decay': batch_norm_decay,
-        'epsilon': batch_norm_epsilon, 'scale': batch_norm_scale,
-        'trainable': False,
-        'updates_collections': tf.GraphKeys.UPDATE_OPS
-    }
-
-    with slim.arg_scope(
-            [slim.conv2d],
-            weights_regularizer=slim.l2_regularizer(weight_decay),
-            weights_initializer=slim.variance_scaling_initializer(),
-            trainable=is_training,
-            activation_fn=tf.nn.relu,
-            normalizer_fn=slim.batch_norm,
-            normalizer_params=batch_norm_params):
-        with slim.arg_scope([slim.batch_norm], **batch_norm_params) as arg_sc:
-            return arg_sc
-
-
-def resnet_base(scope_name, is_training=True):
-    img_batch = layers.InputLayer(input_shape=(None, None, 3))
-
-    if scope_name == 'resnet_v1_50':
-        middle_num_units = 6
-    elif scope_name == 'resnet_v1_101':
-        middle_num_units = 23
-    else:
-        raise NotImplementedError('We only support resnet_v1_50 or resnet_v1_101. Check your network name....yjr')
-
-    blocks = [resnet_v1_block('block1', base_depth=64, num_units=3, stride=2),
-              resnet_v1_block('block2', base_depth=128, num_units=4, stride=2),
-              resnet_v1_block('block3', base_depth=256, num_units=middle_num_units, stride=2),
-              resnet_v1_block('block4', base_depth=512, num_units=3, stride=1)]
-
-    with slim.arg_scope(resnet_arg_scope(is_training=False)):
-        with tf.variable_scope(scope_name, scope_name):
-            # Do the first few layers manually, because 'SAME' padding can behave inconsistently
-            # for images of different sizes: sometimes 0, sometimes 1
-            net = resnet_utils.conv2d_same(
-                img_batch, 64, 7, stride=2, scope='conv1')
-            net = tf.pad(net, [[0, 0], [1, 1], [1, 1], [0, 0]])
-            net = slim.max_pool2d(
-                net, [3, 3], stride=2, padding='VALID', scope='pool1')
-
-    with slim.arg_scope(resnet_arg_scope(is_training=is_training)):
-        c2, end_points_c2 = resnet_v1.resnet_v1(net,
-                                                blocks[0:1],
-                                                global_pool=False,
-                                                include_root_block=False,
-                                                scope=scope_name)
-
-    with slim.arg_scope(resnet_arg_scope(is_training=is_training)):
-        c3, end_points_c3 = resnet_v1.resnet_v1(c2,
-                                                blocks[1:2],
-                                                global_pool=False,
-                                                include_root_block=False,
-                                                scope=scope_name)
-
-    with slim.arg_scope(resnet_arg_scope(is_training=is_training)):
-        c4, end_points_c4 = resnet_v1.resnet_v1(c3,
-                                                blocks[2:3],
-                                                global_pool=False,
-                                                include_root_block=False,
-                                                scope=scope_name)
-
-    with slim.arg_scope(resnet_arg_scope(is_training=is_training)):
-        _, end_points_c5 = resnet_v1.resnet_v1(c4,
-                                               blocks[3:4],
-                                               global_pool=False,
-                                               include_root_block=False,
-                                               scope=scope_name)
-
-    feature_dict = {'C2': end_points_c2['{}/block1/unit_2/bottleneck_v1'.format(scope_name)],
-                    'C3': end_points_c3['{}/block2/unit_3/bottleneck_v1'.format(scope_name)],
-                    'C4': end_points_c4['{}/block3/unit_{}/bottleneck_v1'.format(scope_name, middle_num_units - 1)],
-                    'C5': end_points_c5['{}/block4/unit_3/bottleneck_v1'.format(scope_name)], }
-
-    extractor = tf.keras.Model(img_batch,
-                               [feature_dict['C2'], feature_dict['C3'], feature_dict['C4'], feature_dict['C5']])
-    return extractor
 
 
 def get_resnet_v1_extractor(depth, weight_decay=0.0001):
@@ -499,13 +533,15 @@ class ResnetV1Fpn(BaseFPN):
                              )
 
     def _get_extractor(self):
-        return get_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)
+        # return get_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)
+        return get_slim_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)
 
     def _get_neck(self):
         return ResnetFpnNeck(top_down_dims=self._top_down_dims, weight_decay=self.weight_decay)
 
     def load_fpn_tensorflow_resnet50_weights(self, ckpt_file_path):
         reader = tf.train.load_checkpoint(ckpt_file_path)
+        var_num = 0
 
         extractor = self.get_layer('resnet50')
         extractor_dict = {
@@ -584,7 +620,7 @@ class ResnetV1Fpn(BaseFPN):
                                                                                                      0, 'conv')
         # block3 unit_1-6 conv1-3
         # conv4 block1-6 1-3
-        for i in range(1, 6):
+        for i in range(1, 7):
             for j in range(1, 4):
                 key = ckpt_format.format('block3', 'unit_%d' % i, 'conv%d' % j, '')
                 value = keras_format.format('conv4', 'block%d' % i, j, 'conv')
@@ -594,6 +630,7 @@ class ResnetV1Fpn(BaseFPN):
                 extractor_dict[key] = value
 
         for tf_faster_rcnn_name_pre in extractor_dict.keys():
+            var_num += 1
             if 'BatchNorm' in tf_faster_rcnn_name_pre:
                 cur_weights = [
                     reader.get_tensor(tf_faster_rcnn_name_pre + 'gamma'),
@@ -616,6 +653,7 @@ class ResnetV1Fpn(BaseFPN):
             "build_rpn/rpn_bbox_pred/": "rpn_bbox_conv",
         }
         for tf_faster_rcnn_name_pre in rpn_head_dict.keys():
+            var_num += 1
             rpn_head.get_layer(name=rpn_head_dict[tf_faster_rcnn_name_pre]).set_weights([
                 reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
                 reader.get_tensor(tf_faster_rcnn_name_pre + 'biases'),
@@ -630,6 +668,7 @@ class ResnetV1Fpn(BaseFPN):
             "Fast-RCNN/reg_fc/": "roi_head_bboxes",
         }
         for tf_faster_rcnn_name_pre in roi_head_dict.keys():
+            var_num += 1
             cur_weights = [
                 reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
                 reader.get_tensor(tf_faster_rcnn_name_pre + 'biases'),
@@ -648,9 +687,12 @@ class ResnetV1Fpn(BaseFPN):
             "build_pyramid/fuse_P2/": "build_p2",
         }
         for tf_faster_rcnn_name_pre in fpn_neck_dict.keys():
+            var_num += 1
             cur_weights = [
                 reader.get_tensor(tf_faster_rcnn_name_pre + 'weights'),
                 reader.get_tensor(tf_faster_rcnn_name_pre + 'biases'),
             ]
             fpn_neck.get_layer(name=fpn_neck_dict[tf_faster_rcnn_name_pre]).set_weights(cur_weights)
             tf.logging.info('successfully loaded weights for {}'.format(fpn_neck_dict[tf_faster_rcnn_name_pre]))
+
+        tf.logging.info('successfully loaded {} weights'.format(var_num))

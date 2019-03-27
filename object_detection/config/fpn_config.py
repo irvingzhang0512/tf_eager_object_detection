@@ -64,8 +64,8 @@ def get_default_pascal_faster_rcnn_config():
         'roi_sigma': 1.0,
         'roi_pos_iou_threshold': 0.5,
         'roi_neg_iou_threshold': 0.1,
-        'roi_total_sample_number': 128,
-        'roi_pos_sample_max_number': 32,
+        'roi_total_sample_number': 256,
+        'roi_pos_sample_max_number': 64,
 
     }
 

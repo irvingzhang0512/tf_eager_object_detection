@@ -263,8 +263,9 @@ class BaseFPN(tf.keras.Model):
             # Step 6 for predicting: get predict results
             roi_score_softmax = tf.nn.softmax(roi_score)
             roi_bboxes_txtytwth = tf.reshape(roi_bboxes_txtytwth, [-1, self.num_classes, 4])
+            final_rois = tf.concat(rois_list, axis=0)
             p_rois, p_labels, p_scores = post_ops_prediction(roi_score_softmax, roi_bboxes_txtytwth,
-                                                             rois, image_shape,
+                                                             final_rois, image_shape,
                                                              self._roi_proposal_means, self._roi_proposal_stds,
                                                              max_num_per_class=self._prediction_max_objects_per_class,
                                                              max_num_per_image=self._prediction_max_objects_per_image,
