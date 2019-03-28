@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np
 from object_detection.model.fpn.base_fpn_model import BaseFPN
 
+__all__ = ['ResnetV1Fpn']
+
 layers = tf.keras.layers
 
 BASE_WEIGHTS_PATH = (
@@ -91,10 +93,10 @@ def slim_stack(x, filters, blocks, stride=2, name=None, trainable=True, weight_d
     """
     for i in range(1, blocks):
         x = slim_bottleneck(x, filters, trainable=trainable, weight_decay=weight_decay,
-                                                           name=name + '_block' + str(i))
+                            name=name + '_block' + str(i))
     final_x = slim_bottleneck(x, filters, stride=stride, trainable=trainable,
-                                                             weight_decay=weight_decay,
-                                                             name=name + '_block' + str(blocks))
+                              weight_decay=weight_decay,
+                              name=name + '_block' + str(blocks))
     return x, final_x
 
 
@@ -435,7 +437,7 @@ class ResnetV1Fpn(BaseFPN):
                  rpn_proposal_num_pre_nms_train=12000,
                  rpn_proposal_num_post_nms_train=2000,
                  rpn_proposal_num_pre_nms_test=6000,
-                 rpn_proposal_num_post_nms_test=300,
+                 rpn_proposal_num_post_nms_test=1000,
                  rpn_proposal_nms_iou_threshold=0.7,
 
                  # anchor target 以及相关损失函数参数
@@ -457,8 +459,8 @@ class ResnetV1Fpn(BaseFPN):
                  roi_sigma=1,
                  roi_training_pos_iou_threshold=0.5,
                  roi_training_neg_iou_threshold=0.1,
-                 roi_training_total_num_samples=128,
-                 roi_training_max_pos_samples=32,
+                 roi_training_total_num_samples=256,
+                 roi_training_max_pos_samples=64,
 
                  # prediction 参数
                  prediction_max_objects_per_image=50,
@@ -533,8 +535,8 @@ class ResnetV1Fpn(BaseFPN):
                              )
 
     def _get_extractor(self):
-        # return get_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)
-        return get_slim_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)
+        return get_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)
+        # return get_slim_resnet_v1_extractor(self._depth, weight_decay=self.weight_decay)
 
     def _get_neck(self):
         return ResnetFpnNeck(top_down_dims=self._top_down_dims, weight_decay=self.weight_decay)

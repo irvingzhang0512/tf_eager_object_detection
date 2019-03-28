@@ -33,13 +33,12 @@ def get_default_pascal_faster_rcnn_config():
         'base_anchor_size_list': [32, 64, 128, 256, 512],
 
         # training configs
-        'learning_rate_start': 1e-3,
+        'learning_rate_multi_decay_steps': [60000, 80000],
+        'learning_rate_multi_lrs': [1e-3, 1e-4, 1e-5],
         'optimizer_momentum': 0.9,
-        'learning_rate_decay_steps': 9 * 5000,
-        'learning_rate_decay_rate': 0.1,
-        'learning_rate_bias_double': True,
+        'learning_rate_bias_double': False,
         'weight_decay': 0.0001,
-        'epochs': 14,
+        'epochs': 30,
 
         # rpn net configs
         'rpn_proposal_means': [0, 0, 0, 0],
@@ -63,7 +62,7 @@ def get_default_pascal_faster_rcnn_config():
         'roi_proposal_stds': [0.1, 0.1, 0.2, 0.2],
         'roi_sigma': 1.0,
         'roi_pos_iou_threshold': 0.5,
-        'roi_neg_iou_threshold': 0.1,
+        'roi_neg_iou_threshold': 0.,
         'roi_total_sample_number': 256,
         'roi_pos_sample_max_number': 64,
 

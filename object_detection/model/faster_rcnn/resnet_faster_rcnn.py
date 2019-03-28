@@ -2,6 +2,8 @@ import tensorflow as tf
 from object_detection.model.faster_rcnn.base_faster_rcnn_model import BaseFasterRcnn
 import numpy as np
 
+__all__ = ['ResNetFasterRcnn']
+
 layers = tf.keras.layers
 
 BASE_WEIGHTS_PATH = (
@@ -443,4 +445,3 @@ class ResNetFasterRcnn(BaseFasterRcnn):
         for l in roi_head.layers:
             if '_conv' in l.name and 'block' in l.name:
                 l.use_bias = False
-

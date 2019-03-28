@@ -54,8 +54,8 @@ def get_dataset_by_local_file(mode, root_path, image_format='bgr',
     dataset = tf.data.Dataset.from_tensor_slices(examples_list).map(
         lambda example: tf.py_func(_map_from_cv2,
                                    [example],
-                                   # [tf.float32, tf.float64, tf.int64, tf.int64]
-                                   [tf.float32, tf.float64, tf.int32, tf.int32]
+                                   [tf.float32, tf.float64, tf.int64, tf.int64]  # linux
+                                   # [tf.float32, tf.float64, tf.int32, tf.int32]  # windows
                                    )
     ).batch(1)
 

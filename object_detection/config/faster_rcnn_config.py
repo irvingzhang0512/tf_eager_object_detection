@@ -17,11 +17,10 @@ def get_default_pascal_faster_rcnn_config():
         'extractor_stride': 16,
 
         # training configs
-        'learning_rate_start': 1e-3,
-        'optimizer_momentum': 0.9,
-        'learning_rate_decay_steps': 9 * 5000,
-        'learning_rate_decay_rate': 0.1,
+        'learning_rate_multi_decay_steps': [50000],
+        'learning_rate_multi_lrs': [1e-3, 1e-4],
         'learning_rate_bias_double': True,
+        'optimizer_momentum': 0.9,
         'epochs': 14,
 
         # preprocessing configs
@@ -93,11 +92,10 @@ def get_default_coco_faster_rcnn_config():
         'extractor_stride': 16,
 
         # training configs
-        'learning_rate_start': 1e-3,
-        'optimizer_momentum': 0.9,
-        'learning_rate_decay_steps': 9 * 50000,
-        'learning_rate_decay_rate': 0.1,
+        'learning_rate_multi_decay_steps': [50000],
+        'learning_rate_multi_lrs': [1e-3, 1e-4],
         'learning_rate_bias_double': True,
+        'optimizer_momentum': 0.9,
         'epochs': 14,
 
         # preprocessing configs

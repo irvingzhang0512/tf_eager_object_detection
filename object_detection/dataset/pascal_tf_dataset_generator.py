@@ -34,7 +34,7 @@ def _parse_tf_records(serialized_example):
 
 
 def get_dataset(tf_records_list,
-                min_size=600, max_size=2000,
+                min_size=600, max_size=1000,
                 preprocessing_type='caffe', caffe_pixel_means=None,
                 batch_size=1, repeat=1,
                 shuffle=False, shuffle_buffer_size=1000,

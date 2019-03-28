@@ -102,7 +102,7 @@ def predict_after_roi(roi_scores_softmax, roi_txtytwth, rois, image_shape,
 
 def post_ops_prediction(roi_scores_softmax, roi_txtytwth, rois, image_shape,
                         target_means, target_stds,
-                        max_num_per_class=15,
+                        max_num_per_class=50,
                         max_num_per_image=150,
                         nms_iou_threshold=0.3,
                         score_threshold=0.05,

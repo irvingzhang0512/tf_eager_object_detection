@@ -4,8 +4,7 @@ import argparse
 import numpy as np
 import tensorflow as tf
 
-from object_detection.model.fpn.resnet_fpn import ResnetV1Fpn
-from object_detection.config.fpn_config import PASCAL_CONFIG
+from object_detection.model.model_factory import model_factory
 from object_detection.utils.visual_utils import show_one_image
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as pascal_get_dataset
 from object_detection.dataset.coco_tf_dataset_generator import get_dataset as coco_get_dataset
@@ -20,8 +19,10 @@ tf_logging.set_verbosity(tf_logging.INFO)
 CONFIG = None
 
 
-def apply_gradients(model, optimizer, gradients):
+def train_step(model, loss, tape, optimizer):
     all_vars = model.variables
+    gradients = tape.gradient(loss, all_vars)
+
     if CONFIG['learning_rate_bias_double']:
         all_grads = []
         all_vars = []
@@ -39,69 +40,10 @@ def apply_gradients(model, optimizer, gradients):
                               global_step=tf.train.get_or_create_global_step())
 
 
-def train_step(model, loss, tape, optimizer):
-    apply_gradients(model, optimizer, tape.gradient(loss, model.variables))
-
-
-def _get_default_resnet_model(depth=50):
-    return ResnetV1Fpn(
-        depth=depth,
-        roi_head_keep_dropout_rate=CONFIG['roi_head_keep_dropout_rate'],
-
-        roi_feature_size=CONFIG['resnet_roi_feature_size'],
-        num_classes=CONFIG['num_classes'],
-        weight_decay=CONFIG['weight_decay'],
-
-        level_name_list=CONFIG['level_name_list'],
-        min_level=CONFIG['min_level'],
-        max_level=CONFIG['max_level'],
-        top_down_dims=CONFIG['top_down_dims'],
-
-        anchor_stride_list=CONFIG['anchor_stride_list'],
-        base_anchor_size_list=CONFIG['base_anchor_size_list'],
-        ratios=CONFIG['ratios'],
-        scales=CONFIG['scales'],
-
-        rpn_proposal_means=CONFIG['rpn_proposal_means'],
-        rpn_proposal_stds=CONFIG['rpn_proposal_stds'],
-
-        rpn_proposal_num_pre_nms_train=CONFIG['rpn_proposal_train_pre_nms_sample_number'],
-        rpn_proposal_num_post_nms_train=CONFIG['rpn_proposal_train_after_nms_sample_number'],
-        rpn_proposal_num_pre_nms_test=CONFIG['rpn_proposal_test_pre_nms_sample_number'],
-        rpn_proposal_num_post_nms_test=CONFIG['rpn_proposal_test_after_nms_sample_number'],
-        rpn_proposal_nms_iou_threshold=CONFIG['rpn_proposal_nms_iou_threshold'],
-
-        rpn_sigma=CONFIG['rpn_sigma'],
-        rpn_training_pos_iou_threshold=CONFIG['rpn_pos_iou_threshold'],
-        rpn_training_neg_iou_threshold=CONFIG['rpn_neg_iou_threshold'],
-        rpn_training_total_num_samples=CONFIG['rpn_total_sample_number'],
-        rpn_training_max_pos_samples=CONFIG['rpn_pos_sample_max_number'],
-
-        roi_proposal_means=CONFIG['roi_proposal_means'],
-        roi_proposal_stds=CONFIG['roi_proposal_stds'],
-
-        roi_pool_size=CONFIG['roi_pooling_size'],
-        roi_pooling_max_pooling_flag=CONFIG['roi_pooling_max_pooling_flag'],
-
-        roi_sigma=CONFIG['roi_sigma'],
-        roi_training_pos_iou_threshold=CONFIG['roi_pos_iou_threshold'],
-        roi_training_neg_iou_threshold=CONFIG['roi_neg_iou_threshold'],
-        roi_training_total_num_samples=CONFIG['roi_total_sample_number'],
-        roi_training_max_pos_samples=CONFIG['roi_pos_sample_max_number'],
-
-        prediction_max_objects_per_image=CONFIG['max_objects_per_image'],
-        prediction_max_objects_per_class=CONFIG['max_objects_per_class_per_image'],
-        prediction_nms_iou_threshold=CONFIG['predictions_nms_iou_threshold'],
-        prediction_score_threshold=CONFIG['prediction_score_threshold'],
-    )
-
-
 def _get_default_optimizer(use_adam):
-    lr = tf.train.exponential_decay(learning_rate=CONFIG['learning_rate_start'],
-                                    global_step=tf.train.get_or_create_global_step(),
-                                    decay_steps=CONFIG['learning_rate_decay_steps'],
-                                    decay_rate=CONFIG['learning_rate_decay_rate'],
-                                    staircase=True)
+    lr = tf.train.piecewise_constant(tf.train.get_or_create_global_step(),
+                                     boundaries=CONFIG['learning_rate_multi_decay_steps'],
+                                     values=CONFIG['learning_rate_multi_lrs'])
     if use_adam:
         return tf.train.AdamOptimizer(lr)
     else:
@@ -113,8 +55,7 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
                           data_root_path=None):
     if dataset_type == 'pascal':
         base_pattern = 'pascal_{}_{}_%02d.tfrecords'.format(pascal_year, pascal_mode)
-        file_names = [os.path.join(data_root_path, base_pattern % i)
-                      for i in range(pascal_tf_records_num)]
+        file_names = [os.path.join(data_root_path, base_pattern % i) for i in range(pascal_tf_records_num)]
         dataset = pascal_get_dataset(file_names,
                                      min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
                                      preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
@@ -137,14 +78,20 @@ def train_one_epoch(dataset, base_model, optimizer,
     idx = 0
 
     for image, gt_bboxes, gt_labels in tqdm(dataset):
-        # convert ymin xmin ymax xmax -> xmin ymin xmax ymax
+        # bgr input
+        # for keras application pre-trained models, use bgr
+
+        # conver ymin xmin ymax xmax -> xmin ymin xmax ymax
         gt_bboxes = tf.squeeze(gt_bboxes, axis=0)
         channels = tf.split(gt_bboxes, 4, axis=1)
         gt_bboxes = tf.concat([
             channels[1], channels[0], channels[3], channels[2]
         ], axis=1)
+
+        # set labels to int32
         gt_labels = tf.to_int32(tf.squeeze(gt_labels, axis=0))
 
+        # train one step
         with tf.GradientTape() as tape:
             rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss = base_model((image, gt_bboxes, gt_labels), True)
             l2_loss = tf.add_n(base_model.losses)
@@ -165,7 +112,7 @@ def train_one_epoch(dataset, base_model, optimizer,
             if pred_bboxes is not None:
                 selected_idx = tf.where(pred_scores >= CONFIG['show_image_score_threshold'])[:, 0]
                 if tf.size(selected_idx) != 0:
-                    # gt
+                    # show gt
                     gt_channels = tf.split(gt_bboxes, 4, axis=1)
                     show_gt_bboxes = tf.concat([gt_channels[1], gt_channels[0], gt_channels[3], gt_channels[2]], axis=1)
                     gt_image = show_one_image(tf.squeeze(image, axis=0).numpy(), show_gt_bboxes.numpy(),
@@ -175,7 +122,7 @@ def train_one_epoch(dataset, base_model, optimizer,
                                               enable_matplotlib=False)
                     tf.contrib.summary.image("gt_image", tf.expand_dims(gt_image, axis=0))
 
-                    # pred
+                    # show pred
                     pred_bboxes = tf.gather(pred_bboxes, selected_idx)
                     pred_labels = tf.gather(pred_labels, selected_idx)
                     channels = tf.split(pred_bboxes, num_or_size_splits=4, axis=1)
@@ -193,15 +140,13 @@ def train_one_epoch(dataset, base_model, optimizer,
         # logging
         if idx % logging_every_n_steps == 0:
             if isinstance(optimizer, tf.train.AdamOptimizer):
-                show_lr = optimizer.lr()
+                show_lr = optimizer._lr()
             else:
                 show_lr = optimizer._learning_rate()
-            tf_logging.info('steps %d, lr is %.5f, '
-                            'loss: %.4f, %.4f, %.4f, %.4f, %.4f, %.4f' % (idx + 1, show_lr,
-                                                                          rpn_cls_loss, rpn_reg_loss,
-                                                                          roi_cls_loss, roi_reg_loss,
-                                                                          l2_loss, total_loss)
-                            )
+            logging_format = 'steps %d, lr is %.5f, loss: %.4f, %.4f, %.4f, %.4f, %.4f, %.4f'
+            tf_logging.info(logging_format % (idx + 1, show_lr,
+                                              rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss,
+                                              l2_loss, total_loss))
 
         # saving
         if saver is not None and save_path is not None and idx % save_every_n_steps == 0 and idx != 0:
@@ -210,11 +155,17 @@ def train_one_epoch(dataset, base_model, optimizer,
         idx += 1
 
 
-def train(training_dataset, base_model, optimizer,
+def train(training_dataset,
           preprocessing_type,
+
+          base_model,
+
+          optimizer,
+
           logging_every_n_steps,
           save_every_n_steps,
           summary_every_n_steps,
+
           train_dir,
           ckpt_dir,
           restore_ckpt_file_path,
@@ -250,9 +201,14 @@ def parse_args():
     """
   Parse input arguments
   """
-    parser = argparse.ArgumentParser(description='Train a Fast R-CNN model')
+    parser = argparse.ArgumentParser(description='Train a model')
     parser.add_argument('--gpu_id', default="0", type=str, help='used in sys variable CUDA_VISIBLE_DEVICES')
-    parser.add_argument('--model', default="resnet50", type=str, help='one of [resnet50, resnet101, resnet152]')
+
+    parser.add_argument('--model_type', type=str, default='faster_rcnn',
+                        help='one of [faster_rcnn, fpn]')
+    parser.add_argument('--backbone', type=str, default='resnet50',
+                        help='one of [vgg16, resnet50, resnet101, resnet152]')
+
     parser.add_argument('--data_type', default="pascal", type=str, help='pascal or coco')
     parser.add_argument('--pascal_year', default="2007", type=str, help='one of [2007, 2012, 0712]')
     parser.add_argument('--pascal_mode', default="trainval", type=str, help='one of [trainval, train, val]')
@@ -262,67 +218,71 @@ def parse_args():
     parser.add_argument('--saving_every_n_steps', default=5000, type=int)
     parser.add_argument('--summary_every_n_steps', default=100, type=int)
     parser.add_argument('--restore_ckpt_path', type=str, default=None)
+
     parser.add_argument('--use_adam', type=bool, default=False)
 
+    parser.add_argument('--logs_name', type=str, default='default',
+                        help='logs dir name pattern is `logs-{data_type}-{model_type}-{backbone}-{logs_name}`', )
+
     # parser.add_argument('--data_root_path', default="/ssd/zhangyiyang/COCO2017", type=str)
-    parser.add_argument('--data_root_path', type=str, help='if data_type is pascal: path to save tf record files',
+    parser.add_argument('--data_root_path', type=str,
+                        help='path to tfrecord files if pascal, path to coco root if coco',
                         default="/ssd/zhangyiyang/tf_eager_object_detection/VOCdevkit/tf_eager_records")
     parser.add_argument('--logs_dir', type=str, help='path to save ckpt files and tensorboard summaries.',
                         default="/ssd/zhangyiyang/tf_eager_object_detection/logs")
-    parser.add_argument('--logs_name', type=str, default='default',
-                        help='logs dir name pattern is `logs-fpn-{data_type}-{model}-{logs_name}`', )
 
-    # parser.add_argument('--data_root_path', default="D:\\data\\COCO2017", type=str)
+    # # parser.add_argument('--data_root_path', default="D:\\data\\COCO2017", type=str)
     # parser.add_argument('--data_root_path', default="D:\\data\\VOCdevkit\\tf_eager_records\\", type=str)
-    # parser.add_argument('--logs_dir', default="D:\\data\\logs", type=str)
+    # parser.add_argument('--logs_dir', default="D:\\data\\logs\\logs-pascal", type=str)
 
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
-    config = tf.ConfigProto(allow_soft_placement=True)
-    config.gpu_options.allow_growth = True
-    tf.enable_eager_execution(config=config)
-
     global CONFIG
+    if args.model_type == 'faster_rcnn':
+        from object_detection.config.faster_rcnn_config import COCO_CONFIG, PASCAL_CONFIG
+    elif args.model_type == 'fpn':
+        from object_detection.config.fpn_config import PASCAL_CONFIG
+    else:
+        raise ValueError('unknown model type {}'.format(args.model_type))
+
     if args.data_type == 'coco':
-        raise ValueError('don\'t support coco yet.')
+        CONFIG = COCO_CONFIG
     elif args.data_type == 'pascal':
         CONFIG = PASCAL_CONFIG
     else:
         raise ValueError('unknown data_type {}'.format(args.data_type))
 
-    if args.model == 'resnet50':
-        cur_model = _get_default_resnet_model(50)
-        preprocessing_type = 'caffe'
-    elif args.model == 'resnet101':
-        cur_model = _get_default_resnet_model(101)
-        preprocessing_type = 'caffe'
-    elif args.model == 'resnet152':
-        cur_model = _get_default_resnet_model(152)
-        preprocessing_type = 'caffe'
-    else:
-        raise ValueError('unknown model {}'.format(args.model))
+    # tensorflow eager 模式基本参数设置
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
+    tf.enable_eager_execution(config=config)
 
-    # 重大bug……
-    # 如果没有进行这步操作，keras模型中rpn head的参数并没有初始化，不存在于后续 base_model.variables 中
-    cur_model(tf.to_float(np.random.rand(1, 600, 800, 3)), False)
+    # 建立模型，并初始化
+    cur_model = model_factory(args.model_type, args.backbone, CONFIG)
+    preprocessing_type = 'caffe'
+    cur_model(tf.to_float(np.random.rand(1, 800, 600, 3)), False)
 
-    # logs-{data_type}-{model}-{logs_name}
-    logs_name_pattern = 'logs-fpn-{}-{}-{}'
-    logs_path_name = logs_name_pattern.format(args.data_type, args.model, args.logs_name)
+    # logs基本信息
+    # logs-{data_type}-{model_type}-{backbone}-{logs_name}
+    logs_name_pattern = 'logs-{}-{}-{}-{}'
+    logs_path_name = logs_name_pattern.format(args.data_type, args.model_type, args.backbone, args.logs_name)
 
+    # 开始训练
     train(training_dataset=_get_training_dataset(preprocessing_type=preprocessing_type,
                                                  dataset_type=args.data_type,
                                                  pascal_year=args.pascal_year,
                                                  pascal_mode=args.pascal_mode,
                                                  pascal_tf_records_num=args.pascal_tf_records_num,
                                                  data_root_path=args.data_root_path),
-          base_model=cur_model,
-          optimizer=_get_default_optimizer(args.use_adam),
           preprocessing_type=preprocessing_type,
+
+          base_model=cur_model,
+
+          optimizer=_get_default_optimizer(args.use_adam),
 
           logging_every_n_steps=args.logging_every_n_steps,
           save_every_n_steps=args.saving_every_n_steps,
