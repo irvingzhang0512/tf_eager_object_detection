@@ -3,9 +3,11 @@ def get_default_pascal_faster_rcnn_config():
         # vgg16
         'vgg16_roi_feature_size': (7, 7, 512),
         'roi_head_keep_dropout_rate': 0.5,
+        'vgg16_roi_pooling_max_pooling_flag': True,
 
         # resnet
         'resnet_roi_feature_size': (7, 7, 1024),
+        'resnet_roi_pooling_max_pooling_flag': False,
 
         # base configs
         'num_classes': 21,
@@ -61,7 +63,6 @@ def get_default_pascal_faster_rcnn_config():
 
         # roi pooling
         'roi_pooling_size': 7,
-        'roi_pooling_max_pooling_flag': False,
 
         # proposal target
         'roi_sigma': 1.0,
@@ -78,9 +79,11 @@ def get_default_coco_faster_rcnn_config():
         # vgg16
         'vgg16_roi_feature_size': (7, 7, 512),
         'roi_head_keep_dropout_rate': 0.5,
+        'vgg16_roi_pooling_max_pooling_flag': True,
 
         # resnet
         'resnet_roi_feature_size': (7, 7, 1024),
+        'resnet_roi_pooling_max_pooling_flag': False,
 
         # base configs
         'num_classes': 91,
@@ -136,7 +139,6 @@ def get_default_coco_faster_rcnn_config():
 
         # roi pooling
         'roi_pooling_size': 7,
-        'roi_pooling_max_pooling_flag': True,
 
         # proposal target
         'roi_sigma': 1.0,

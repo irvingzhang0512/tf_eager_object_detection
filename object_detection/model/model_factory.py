@@ -114,7 +114,7 @@ def _get_faster_rcnn_resnet_model(depth, config):
         roi_proposal_stds=config['roi_proposal_stds'],
 
         roi_pool_size=config['roi_pooling_size'],
-        roi_pooling_max_pooling_flag=config['roi_pooling_max_pooling_flag'],
+        roi_pooling_max_pooling_flag=config['resnet_roi_pooling_max_pooling_flag'],
 
         roi_sigma=config['roi_sigma'],
         roi_training_pos_iou_threshold=config['roi_pos_iou_threshold'],
@@ -161,7 +161,7 @@ def _get_faster_rcnn_vgg16_model(slim_ckpt_file_path, config):
         roi_proposal_stds=config['roi_proposal_stds'],
 
         roi_pool_size=config['roi_pooling_size'],
-        roi_pooling_max_pooling_flag=config['roi_pooling_max_pooling_flag'],
+        roi_pooling_max_pooling_flag=config['vgg16_roi_pooling_max_pooling_flag'],
 
         roi_sigma=config['roi_sigma'],
         roi_training_pos_iou_threshold=config['roi_pos_iou_threshold'],

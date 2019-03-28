@@ -143,7 +143,7 @@ class Vgg16FasterRcnn(BaseFasterRcnn):
             ])
             tf.logging.info('successfully loaded weights for {}'.format(extractor_dict[slim_tensor_name_pre]))
 
-        rpn_head = self.get_layer('vgg16_rpn_head')
+        rpn_head = self.get_layer('rpn_head')
         rpn_head_dict = {
             'vgg_16/rpn_conv/3x3/': 'rpn_first_conv',
             'vgg_16/rpn_cls_score/': 'rpn_score_conv',

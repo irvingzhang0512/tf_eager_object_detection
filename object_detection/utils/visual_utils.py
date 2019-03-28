@@ -36,41 +36,40 @@ def draw_bboxes_with_labels(image, bboxes, label_texts):
     return image
 
 
-def show_one_image(image, bboxes, labels_text=None, preprocess_type='caffe', caffe_pixel_means=None,
+def show_one_image(preprocessed_image, bboxes, labels_text=None, preprocessing_type='caffe', caffe_pixel_means=None,
                    figsize=(15, 10), enable_matplotlib=True):
     """
     显示图片
-    :param image:
+    :param preprocessed_image:      preprocessed image by `preprocessing_type`, if caffe then bgr, if tf then rgb
     :param bboxes:
     :param labels_text:
-    :param preprocess_type:
+    :param preprocessing_type:
     :param caffe_pixel_means:
     :param figsize:
     :param enable_matplotlib:
     :return:
     """
-    if isinstance(image, tf.Tensor):
-        image = tf.squeeze(image, axis=0).numpy()
+    if isinstance(preprocessed_image, tf.Tensor):
+        preprocessed_image = tf.squeeze(preprocessed_image, axis=0).numpy()
     if isinstance(bboxes, tf.Tensor):
         bboxes = bboxes.numpy()
     if isinstance(labels_text, tf.Tensor):
         labels_text = labels_text.numpy()
-    # 因为原始数据中，将 bboxes 范围限定在 [0, height-1] [0, width - 1] 中，所以显示的时候，要要返回1
-    if preprocess_type == 'caffe':
+    if preprocessing_type == 'caffe':
         cur_means = caffe_pixel_means
-        image[..., 0] += cur_means[0]
-        image[..., 1] += cur_means[1]
-        image[..., 2] += cur_means[2]
-        image = image[..., ::-1]
-        image = image.astype(np.uint8)
-    elif preprocess_type == 'tf':
-        image = ((image + 1.0) / 2.0) * 255.0
-        image = image.astype(np.uint8)
-    elif preprocess_type is None:
+        preprocessed_image[..., 0] += cur_means[0]
+        preprocessed_image[..., 1] += cur_means[1]
+        preprocessed_image[..., 2] += cur_means[2]
+        preprocessed_image = preprocessed_image[..., ::-1]
+        preprocessed_image = preprocessed_image.astype(np.uint8)
+    elif preprocessing_type == 'tf':
+        preprocessed_image = ((preprocessed_image + 1.0) / 2.0) * 255.0
+        preprocessed_image = preprocessed_image.astype(np.uint8)
+    elif preprocessing_type is None:
         pass
     else:
-        raise ValueError('unknown preprocess_type {}'.format(preprocess_type))
-    image_with_bboxes = draw_bboxes_with_labels(image, bboxes, labels_text)
+        raise ValueError('unknown preprocess_type {}'.format(preprocessing_type))
+    image_with_bboxes = draw_bboxes_with_labels(preprocessed_image, bboxes, labels_text)
     if enable_matplotlib:
         plt.figure(figsize=figsize)
         plt.imshow(image_with_bboxes)

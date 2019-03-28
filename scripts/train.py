@@ -3,13 +3,17 @@ import time
 import argparse
 import numpy as np
 import tensorflow as tf
+import math
 
 from object_detection.model.model_factory import model_factory
+from object_detection.config.config_factory import config_factory
 from object_detection.utils.visual_utils import show_one_image
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as pascal_get_dataset
 from object_detection.dataset.coco_tf_dataset_generator import get_dataset as coco_get_dataset
 from tensorflow.contrib.summary import summary
 from tensorflow.contrib.eager.python import saver as eager_saver
+from tensorflow.python.eager import context
+from tensorflow.contrib.memory_stats import MaxBytesInUse
 from tensorflow.python.platform import tf_logging
 from tqdm import tqdm
 
@@ -17,6 +21,16 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 tf_logging.set_verbosity(tf_logging.INFO)
 
 CONFIG = None
+
+
+def convert_size(size_bytes):
+    if size_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return "{} {}".format(s, size_name[i])
 
 
 def train_step(model, loss, tape, optimizer):
@@ -117,7 +131,7 @@ def train_one_epoch(dataset, base_model, optimizer,
                     show_gt_bboxes = tf.concat([gt_channels[1], gt_channels[0], gt_channels[3], gt_channels[2]], axis=1)
                     gt_image = show_one_image(tf.squeeze(image, axis=0).numpy(), show_gt_bboxes.numpy(),
                                               gt_labels.numpy(),
-                                              preprocess_type=preprocessing_type,
+                                              preprocessing_type=preprocessing_type,
                                               caffe_pixel_means=CONFIG['bgr_pixel_means'],
                                               enable_matplotlib=False)
                     tf.contrib.summary.image("gt_image", tf.expand_dims(gt_image, axis=0))
@@ -132,7 +146,7 @@ def train_one_epoch(dataset, base_model, optimizer,
                     pred_image = show_one_image(tf.squeeze(image, axis=0).numpy(),
                                                 show_pred_bboxes.numpy(),
                                                 pred_labels.numpy(),
-                                                preprocess_type=preprocessing_type,
+                                                preprocessing_type=preprocessing_type,
                                                 caffe_pixel_means=CONFIG['bgr_pixel_means'],
                                                 enable_matplotlib=False)
                     tf.contrib.summary.image("pred_image", tf.expand_dims(pred_image, axis=0))
@@ -147,6 +161,7 @@ def train_one_epoch(dataset, base_model, optimizer,
             tf_logging.info(logging_format % (idx + 1, show_lr,
                                               rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss,
                                               l2_loss, total_loss))
+            tf_logging.info('cur memory is {}'.format(convert_size(MaxBytesInUse().numpy())))
 
         # saving
         if saver is not None and save_path is not None and idx % save_every_n_steps == 0 and idx != 0:
@@ -193,6 +208,9 @@ def train(training_dataset,
                             summary_every_n_steps=summary_every_n_steps,
                             saver=saver, save_every_n_steps=save_every_n_steps, save_path=ckpt_dir,
                             )
+        tf.reset_default_graph()
+        tf.set_random_seed(1)
+        context.context()._clear_caches()
         train_end = time.time()
         tf_logging.info('epoch %d training finished, costing %d seconds...' % (i + 1, train_end - start))
 
@@ -241,24 +259,13 @@ def parse_args():
 
 def main(args):
     global CONFIG
-    if args.model_type == 'faster_rcnn':
-        from object_detection.config.faster_rcnn_config import COCO_CONFIG, PASCAL_CONFIG
-    elif args.model_type == 'fpn':
-        from object_detection.config.fpn_config import PASCAL_CONFIG
-    else:
-        raise ValueError('unknown model type {}'.format(args.model_type))
-
-    if args.data_type == 'coco':
-        CONFIG = COCO_CONFIG
-    elif args.data_type == 'pascal':
-        CONFIG = PASCAL_CONFIG
-    else:
-        raise ValueError('unknown data_type {}'.format(args.data_type))
+    CONFIG = config_factory(args.data_type, args.model_type)
 
     # tensorflow eager 模式基本参数设置
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     config = tf.ConfigProto(allow_soft_placement=True)
     config.gpu_options.allow_growth = True
+    # config.log_device_placement = True
     tf.enable_eager_execution(config=config)
 
     # 建立模型，并初始化

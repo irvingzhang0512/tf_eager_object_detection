@@ -185,16 +185,16 @@ class BaseFasterRcnn(tf.keras.Model):
             # pred_bboxes, pred_labels, pred_scores
             roi_score_softmax = tf.nn.softmax(roi_score)
             roi_bboxes_txtytwth = tf.reshape(roi_bboxes_txtytwth, [-1, self.num_classes, 4])
-            pred_rois, pred_labels, pred_scores = post_ops_prediction(roi_score_softmax, roi_bboxes_txtytwth,
-                                                                      rois, image_shape,
-                                                                      self._roi_proposal_means, self._roi_proposal_stds,
-                                                                      max_num_per_class=self._prediction_max_objects_per_class,
-                                                                      max_num_per_image=self._prediction_max_objects_per_image,
-                                                                      nms_iou_threshold=self._prediction_nms_iou_threshold,
-                                                                      score_threshold=self._prediction_score_threshold,
-                                                                      extractor_stride=self._extractor_stride,
-                                                                      )
-            return pred_rois, pred_labels, pred_scores
+            p_rois, p_labels, p_scores = post_ops_prediction(roi_score_softmax, roi_bboxes_txtytwth,
+                                                             rois, image_shape,
+                                                             self._roi_proposal_means, self._roi_proposal_stds,
+                                                             max_num_per_class=self._prediction_max_objects_per_class,
+                                                             max_num_per_image=self._prediction_max_objects_per_image,
+                                                             nms_iou_threshold=self._prediction_nms_iou_threshold,
+                                                             score_threshold=self._prediction_score_threshold,
+                                                             extractor_stride=self._extractor_stride,
+                                                             )
+            return p_rois, p_labels, p_scores
 
     def _get_rpn_loss(self, rpn_score, rpn_bbox_txtytwth,
                       anchor_target_labels, anchor_target_bboxes_txtytwth,
@@ -223,13 +223,8 @@ class BaseFasterRcnn(tf.keras.Model):
         return roi_cls_loss, roi_reg_loss
 
     def predict_rpn(self, image, gt_bboxes):
-
         image_shape = image.get_shape().as_list()[1:3]
         tf.logging.debug('image shape is {}'.format(image_shape))
-
-        shared_features = self._extractor(image, training=True)
-        shared_features_shape = shared_features.get_shape().as_list()[1:3]
-        tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
 
         anchors = generate_by_anchor_base_tf(self._anchor_base, self._extractor_stride,
                                              tf.to_int32(tf.ceil(image_shape[0] / self._extractor_stride)),
@@ -280,11 +275,11 @@ class BaseFasterRcnn(tf.keras.Model):
         bboxes, labels, scores = self(preprocessed_image, training=False)
         return bboxes, labels, scores
 
-    def im_detect(self, image, img_scale):
-        image_shape = image.get_shape().as_list()[1:3]
+    def im_detect(self, preprocessed_image, img_scale):
+        image_shape = preprocessed_image.get_shape().as_list()[1:3]
         tf.logging.debug('image shape is {}'.format(image_shape))
 
-        shared_features = self._extractor(image, training=False)
+        shared_features = self._extractor(preprocessed_image, training=False)
         shared_features_shape = shared_features.get_shape().as_list()[1:3]
         tf.logging.debug('shared_features shape is {}'.format(shared_features_shape))
 
@@ -300,11 +295,9 @@ class BaseFasterRcnn(tf.keras.Model):
         scores = tf.transpose(tf.reshape(tf.nn.softmax(scores), [-1, self._num_anchors, 2]), [0, 2, 1])
         scores = tf.reshape(scores, [-1, 2 * self._num_anchors])
         scores = tf.reshape(scores[..., self._num_anchors:], [-1])
-        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, scores, image_shape),
-                                  training=False)
+        rois = self._rpn_proposal((rpn_bbox_txtytwth, anchors, scores, image_shape), training=False)
 
-        roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride),
-                                         training=False)
+        roi_features = self._roi_pooling((shared_features, rois, self._extractor_stride), training=False)
         roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=False)
         roi_score_softmax = tf.nn.softmax(roi_score)
         rois = rois / tf.to_float(img_scale)

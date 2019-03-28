@@ -2,21 +2,15 @@
 
 ## 0. Targets
 + TensorFlow Eager Mode.
-+ Object Detection Model.
-    + [x] faster rcnn
-    + [ ] fpn
-    + [ ] mask rcnn
-
++ Object detection models.
 
 ## 1. Architecture
 + `scripts`:
     + `generate_pascal_tf_records.py`: generate tfrecords files from pascal source files.
     + `train.py`: train coco or pascal.
-    + `eval_pascal.py`: eval 2007 pascal test set.
-+ `object_detection/model`:
-    + `faster_rcnn_config.py`: configs of faster rcnn.
-+ `object_detection/dataset`:
+    + `eval_pascal.py`: eval pascal dataset.
     + `label_map_src`: copy from TensorFlow Object Detection API.
++ `object_detection/dataset`:
     + `utils`:
         + `label_map_utils.py`: copy from TensorFlow Object Detection API.
         + `tf_record_utils.py`: utils to generate tfrecords files.    
@@ -33,70 +27,86 @@
     + `faster_rcnn`:
         + `base_faster_rcnn_model.py`: base class for faster rcnn.
         + `vgg16_faster_rcnn.py`: vgg16 faster rcnn model.
+        + `resnet_faster_rcnn.py`: resnet faster rcnn model.
+    + `fpn`:
+        + `base_fpn_model.py`: base class for fpn.
+        + `resnet_fpn.py`: resnet fpn model.
+    + `model_factory`: factory for model creation.
     + `anchor_target.py`: generate anchor target for rpn training.
     + `losses.py`: smooth l1 loss & cross entropy loss.
     + `prediction.py`: generate predictions after roi head.
     + `proposal_target.py`: generate proposal target for roi training.
     + `region_proposal.py`: generate region proposals for both training & testing procedure.
-    + `roi_pooling`: roi pooling results.
+    + `roi_pooling.py`: roi pooling results.
 + `object_detection/protos`: protobuf source files.
     + `protoc ./object_detection/protos/*.proto --python_out=./object_detection/protos/ `
 + `object_detection/utils`:
-    + `anchors.py`: generate anchors.
+    + `anchor_generator.py`: generate anchors.
     + `bbox_np.py`: cal iou, bbox range filter and bbox clip filter by np.
     + `bbox_tf.py`: cal iou, bbox range filter and bbox clip filter by tf.
     + `bbox_transform.py`: convert between bbox(xmin, ymin, xmax, ymax) and pred(tx, ty, tw, th)
     + `visual_utils.py`: draw bboxes in an image.
     + `pytorch_to_tf.py`: convert pytorch model to pickle map.
 
-## 2. TODO
-+ [x] use different preprocessing utils for different feature extractor.
-+ [x] remove all magic number and use config dict to cover all params in faster rcnn.
-+ [x] add l2 regularize loss.
-+ [x] compare current net with the original faster rcnn model.
-+ [x] add summaries in training procedure.
-+ [x] use `logging` instead of `print`.
-+ [x] COCO dataset & training.
-+ [x] set bboxes range in `[0, height - 1]` & `[0, width - 1]`.
-+ [x] add prediction_score_threshold for image summary.
-+ [x] add model load/save functions.
-+ [x] predict and visual scripts.
-+ [x] add resnet faster rcnn model.
-+ [x] implement proposal target with tf version of `numpy.random.choice`.
-+ [ ] eval result file paths.
-+ [ ] BUG: after a few epochs, gpu memory will boomed twice...
-+ [ ] use `defun` in all components.
 
+---
+
+
+## 2. TODO
+
+### 2.1. dataset
++ [x] pascal training dataset.
++ [x] pascal evaluating dataset.
++ [x] coco training dataset.
++ [ ] coco evaluating dataset.
+
+### 2.2. model
++ [x] faster rcnn
++ [x] fpn
++ [ ] mask rcnn
+
+### 2.3. training & evaluating
++ [ ] use `defun` in all components.
++ [ ] multi gpu support.
+
+### 2.4. others
++ [ ] BUG: after a few epochs, gpu memory will boomed twice...
++ [ ] jupyter samples.
+
+---
 
 ## 3. training records
++ trained on voc2007 trainval, evaluating on pascal 2007 test set(use voc2007 metric).
 
 ### 3.1. VGG16-Faster-RCNN
-+ load tf-faster-rcnn pre-trained model，mAP of pascal 2007 test set is 0.71。
-+ end-to-end training：load slim pretrained model (`logs-pascal-slim`):
-    + 0.6935(or 0.6869).
-    + without data argument: after 14 epochs, mAP is 0.6659.
-    + double bias: 0.6786
-+ alt training：load slim pretrained model
-    + Step 1: training extractor & rpn head(rpn loss, 14 epochs, no l2 loss, `logs-pascal-slim-rpn`)
-    + Step 2: training roi head & roi pooling(roi loss, 14 epochs, `logs-pascal-slim-roi-after-rpn`)
-    + Step 3: training rpn head only(rpn loss, 14 epochs, `logs-pascal-slim-rpn-only`), mAP is 0.6683.
-    + Step 4: training roi head only(roi loss, 14 epochs, `logs-pascal-slim-roi-only`), mAP is 0.6733.
+| Models | mAP |
+|:------:|:-----:|
+|tf-faster-rcnn(source)|0.708|
+|tf-faster-rcnn(load pre-trained model)|0.7106|
+|typical configs|0.6935/0.6869|
+|without data argument|0.6659|
 
 ### 3.2. ResNet-Faster-RCNN
 + resnet 101
-    + train tf-faster-rcnn resnet101 by myself: 0.7393.
-    + load official tf-faster-rcnn pre-trained model, mAP of pascal 2007 test set:
-        + standard: 0.7566
-    + end to end training: load keras pre-trained model(`logs-pascal-resnet101-default`):
-        + without max pooling, proposal target 0.1 - 0.5: 0.7276, 0.7249
-        + max pooling, proposal target 0.1 - 0.5: 0.7235
-        + without max pooling, proposal target 0. - 0.5: 0.7456
-        + without max pooling, proposal target 0. - 0.5, fix double bias: 0.7296
-        + without max pooling, proposal target 0. - 0.5, no bias: 0.7307, 0.7270
+
+| Models | mAP |
+|:------:|:-----:|
+|tf-faster-rcnn(source)|0.757|
+|tf-faster-rcnn(load pre-trained model)|0.7578|
+|typical configs|0.7456/0.7296|
+|remove bias for extractor|0.7307/0.7270|
 
 ### 3.3. FPN-Tensorflow
 + resnet 50
-    + load official FPN_Tensorflow pre-trained model: mAP of pascal 2007 test set is 0.7430
+
+| Models | mAP |
+|:------:|:-----:|
+|FPN_Tensorflow(source)|0.7426|
+|tf-faster-rcnn(load pre-trained model)|0.7430|
+|14 epochs|0.70|
+
+
+---
 
 ## 4. 可有可无的教程……
 + training on pascal voc 2007 trainval set, evaluating on pascal voc 2007 test set.
