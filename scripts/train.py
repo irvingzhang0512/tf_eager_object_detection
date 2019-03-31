@@ -12,8 +12,7 @@ from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as 
 from object_detection.dataset.coco_tf_dataset_generator import get_dataset as coco_get_dataset
 from tensorflow.contrib.summary import summary
 from tensorflow.contrib.eager.python import saver as eager_saver
-from tensorflow.python.eager import context
-from tensorflow.contrib.memory_stats import MaxBytesInUse
+from tensorflow.contrib.memory_stats import MaxBytesInUse, BytesInUse, BytesLimit
 from tensorflow.python.platform import tf_logging
 from tqdm import tqdm
 
@@ -161,7 +160,11 @@ def train_one_epoch(dataset, base_model, optimizer,
             tf_logging.info(logging_format % (idx + 1, show_lr,
                                               rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss,
                                               l2_loss, total_loss))
-            tf_logging.info('cur memory is {}'.format(convert_size(MaxBytesInUse().numpy())))
+            tf_logging.info('{}, {}, {}'.format(convert_size(MaxBytesInUse().numpy()),
+                                                convert_size(BytesLimit().numpy()),
+                                                convert_size(BytesInUse().numpy())
+                                                )
+                            )
 
         # saving
         if saver is not None and save_path is not None and idx % save_every_n_steps == 0 and idx != 0:
@@ -193,6 +196,7 @@ def train(training_dataset,
         saver.restore(restore_ckpt_file_path)
 
     # 当前 logs_dir 中的预训练模型，用于继续训练
+    print(ckpt_dir)
     if tf.train.latest_checkpoint(ckpt_dir) is not None:
         saver.restore(tf.train.latest_checkpoint(ckpt_dir))
 
@@ -208,9 +212,7 @@ def train(training_dataset,
                             summary_every_n_steps=summary_every_n_steps,
                             saver=saver, save_every_n_steps=save_every_n_steps, save_path=ckpt_dir,
                             )
-        tf.reset_default_graph()
         tf.set_random_seed(1)
-        context.context()._clear_caches()
         train_end = time.time()
         tf_logging.info('epoch %d training finished, costing %d seconds...' % (i + 1, train_end - start))
 

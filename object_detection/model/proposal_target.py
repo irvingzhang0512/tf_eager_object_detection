@@ -62,7 +62,6 @@ class ProposalTarget(tf.keras.Model):
         fg_inds = tf.where(max_overlaps >= self._pos_iou_threshold)[:, 0]
         bg_inds = tf.where(tf.logical_and(max_overlaps < self._pos_iou_threshold,
                                           max_overlaps >= self._neg_iou_threshold))[:, 0]
-        # bg_inds = tf.where(max_overlaps < self._pos_iou_threshold)[:, 0]
 
         # 筛选 前景/背景
         if tf.size(fg_inds) > self._max_pos_samples:
@@ -89,10 +88,15 @@ class ProposalTarget(tf.keras.Model):
         # inside weights 只有正例才会设置，其他均为0
         bbox_inside_weights = tf.zeros((tf.size(keep_inds), self._num_classes, 4), dtype=tf.float32)
         if tf.size(fg_inds) > 0:
-            cur_index = tf.stack([tf.range(tf.size(fg_inds)), tf.gather(labels, fg_inds)], axis=1)
-            bbox_inside_weights = tf.scatter_nd_update(tf.Variable(bbox_inside_weights),
-                                                       cur_index,
-                                                       tf.ones([tf.size(fg_inds), 4]))
+            # memory leak bug for tf.scatter_nd_update
+            # https://github.com/tensorflow/tensorflow/issues/27288
+            # cur_index = tf.stack([tf.range(tf.size(fg_inds)), tf.gather(labels, fg_inds)], axis=1)
+            # bbox_inside_weights = tf.scatter_nd_update(tf.Variable(bbox_inside_weights),
+            #                                            cur_index,
+            #                                            tf.ones([tf.size(fg_inds), 4]))
+            bbox_inside_weights = bbox_inside_weights.numpy()
+            for idx, fg_ind in enumerate(fg_inds.numpy()):
+                bbox_inside_weights[idx, labels[idx]] = 1
         bbox_inside_weights = tf.reshape(bbox_inside_weights, [-1, self._num_classes * 4])
 
         # final bbox target 只有正例才会设置，其他均为0
@@ -102,9 +106,16 @@ class ProposalTarget(tf.keras.Model):
                                                          tf.gather(gt_bboxes, tf.gather(gt_assignment, fg_inds)),
                                                          target_stds=self._target_stds, target_means=self._target_means,
                                                          )
-            final_bbox_targets = tf.scatter_nd_update(tf.Variable(final_bbox_targets),
-                                                      tf.stack([tf.range(tf.size(fg_inds)), tf.gather(labels, fg_inds)],
-                                                               axis=1), bbox_targets)
+            # memory leak bug for tf.scatter_nd_update
+            # https://github.com/tensorflow/tensorflow/issues/27288
+            # final_bbox_targets = tf.scatter_nd_update(tf.Variable(final_bbox_targets),
+            #                                           tf.stack([tf.range(tf.size(fg_inds)),
+            #                                                     tf.gather(labels, fg_inds)], axis=1), bbox_targets)
+            final_bbox_targets = final_bbox_targets.numpy()
+            bbox_targets = bbox_targets.numpy()
+            for idx, fg_ind in enumerate(fg_inds.numpy()):
+                final_bbox_targets[idx, labels[idx]] = bbox_targets[idx]
+
         final_bbox_targets = tf.reshape(final_bbox_targets, [-1, self._num_classes * 4])
 
         # 这个好像没啥用

@@ -228,7 +228,7 @@ class BaseFPN(tf.keras.Model):
             rpn_labels, rpn_bbox_targets, rpn_in_weights, rpn_out_weights = self._anchor_target((gt_bboxes,
                                                                                                  image_shape,
                                                                                                  all_anchors),
-                                                                                                True)
+                                                                                                training)
             rpn_cls_loss, rpn_reg_loss = self._get_rpn_loss(all_fpn_scores, all_fpn_bbox_pred,
                                                             rpn_labels, rpn_bbox_targets,
                                                             rpn_in_weights, rpn_out_weights)
@@ -238,14 +238,13 @@ class BaseFPN(tf.keras.Model):
                                                                                                               gt_bboxes,
                                                                                                               gt_labels,
                                                                                                               ),
-                                                                                                             True)
-
-            # Step 6 for training: get roi features and roi heads
+                                                                                                             training)
+            # Step 7 for training: get roi features and roi heads
             rois_list, selected_idx = self._assign_levels(final_rois)
             roi_features = self._get_roi_features(rois_list, p_list, image_shape)
             roi_score, roi_bboxes_txtytwth = self._roi_head(roi_features, training=training)
 
-            # Step 7 for training: get roi loss
+            # Step 8 for training: get roi loss
             roi_labels = tf.gather(roi_labels, selected_idx)
             roi_bbox_target = tf.gather(roi_bbox_target, selected_idx)
             roi_in_weights = tf.gather(roi_in_weights, selected_idx)

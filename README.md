@@ -70,7 +70,7 @@
 + [ ] multi gpu support.
 
 ### 2.4. others
-+ [ ] BUG: after a few epochs, gpu memory will boomed twice...
++ [x] BUG: after a few epochs, gpu memory will boomed twice... #issue 27288
 + [ ] jupyter samples.
 
 ---
@@ -83,7 +83,7 @@
 |:------:|:-----:|
 |tf-faster-rcnn(source)|0.708|
 |tf-faster-rcnn(load pre-trained model)|0.7106|
-|typical configs|0.6935/0.6869|
+|typical configs|0.6935/0.6869/0.6751|
 |without data argument|0.6659|
 
 ### 3.2. ResNet-Faster-RCNN
@@ -93,7 +93,7 @@
 |:------:|:-----:|
 |tf-faster-rcnn(source)|0.757|
 |tf-faster-rcnn(load pre-trained model)|0.7578|
-|typical configs|0.7456/0.7296|
+|typical configs|0.7456/0.7303/0.7247/0.7261|
 |remove bias for extractor|0.7307/0.7270|
 
 ### 3.3. FPN-Tensorflow
@@ -103,7 +103,7 @@
 |:------:|:-----:|
 |FPN_Tensorflow(source)|0.7426|
 |tf-faster-rcnn(load pre-trained model)|0.7430|
-|14 epochs|0.70|
+|typical configs|0.7465/0.7377/0.7392|
 
 
 ---
