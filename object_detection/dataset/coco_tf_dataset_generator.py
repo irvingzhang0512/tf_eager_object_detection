@@ -9,6 +9,7 @@ from object_detection.dataset.utils.tf_dataset_utils import image_argument_with_
 
 _COCO_TRAIN_DATASET = None
 _COCO_VAL_DATASET = None
+_COCO_TEST_DATASET = None
 
 
 class CocoDataset:
@@ -129,18 +130,21 @@ def get_dataset(root_dir='D:\\data\\COCO2017',
                 shuffle=False, shuffle_buffer_size=1000,
                 prefetch=False, prefetch_buffer_size=1000,
                 argument=True, iaa_sequence=None):
-    global _COCO_TRAIN_DATASET
-    global _COCO_VAL_DATASET
-    if mode not in ['train', 'val']:
+    global _COCO_TRAIN_DATASET, _COCO_VAL_DATASET, _COCO_TEST_DATASET
+    if mode not in ['train', 'val', 'test']:
         raise ValueError('unknown mode {}'.format(mode))
     if mode == 'train':
         if _COCO_TRAIN_DATASET is None:
             _COCO_TRAIN_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
         coco_dataset = _COCO_TRAIN_DATASET
-    else:
+    elif mode == 'val':
         if _COCO_VAL_DATASET is None:
             _COCO_VAL_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
         coco_dataset = _COCO_VAL_DATASET
+    else:
+        if _COCO_TEST_DATASET is None:
+            _COCO_TEST_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
+        coco_dataset = _COCO_TEST_DATASET
 
     def _parse_coco_data_py(img_id):
         file_path, gt_bboxes, image_height, image_width, gt_labels = coco_dataset[img_id]

@@ -102,8 +102,16 @@
 | Models | mAP |
 |:------:|:-----:|
 |FPN_Tensorflow(source)|0.7426|
-|tf-faster-rcnn(load pre-trained model)|0.7430|
+|FPN_Tensorflow(load pre-trained model)|0.7430|
 |typical configs|0.7465/0.7377/0.7392|
+
++ resnet 101
+
+| Models | mAP |
+|:------:|:-----:|
+|FPN_Tensorflow(source)|0.7614|
+|FPN_Tensorflow(load pre-trained model)||
+|typical configs|0.7604|
 
 
 ---
