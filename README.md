@@ -58,7 +58,7 @@
 + [x] pascal training dataset.
 + [x] pascal evaluating dataset.
 + [x] coco training dataset.
-+ [ ] coco evaluating dataset.
++ [x] coco evaluating dataset.
 
 ### 2.2. model
 + [x] faster rcnn
@@ -76,42 +76,22 @@
 ---
 
 ## 3. training records
-+ trained on voc2007 trainval, evaluating on pascal 2007 test set(use voc2007 metric).
 
-### 3.1. VGG16-Faster-RCNN
+### 3.1. VOC Pascal 2007 trainval & test
 | Models | mAP |
 |:------:|:-----:|
-|tf-faster-rcnn(source)|0.708|
-|tf-faster-rcnn(load pre-trained model)|0.7106|
-|typical configs|0.6935/0.6869/0.6751|
-|without data argument|0.6659|
-
-### 3.2. ResNet-Faster-RCNN
-+ resnet 101
-
-| Models | mAP |
-|:------:|:-----:|
-|tf-faster-rcnn(source)|0.757|
-|tf-faster-rcnn(load pre-trained model)|0.7578|
-|typical configs|0.7456/0.7303/0.7247/0.7261|
-|remove bias for extractor|0.7307/0.7270|
-
-### 3.3. FPN-Tensorflow
-+ resnet 50
-
-| Models | mAP |
-|:------:|:-----:|
-|FPN_Tensorflow(source)|0.7426|
-|FPN_Tensorflow(load pre-trained model)|0.7430|
-|typical configs|0.7465/0.7377/0.7392|
-
-+ resnet 101
-
-| Models | mAP |
-|:------:|:-----:|
-|FPN_Tensorflow(source)|0.7614|
-|FPN_Tensorflow(load pre-trained model)||
-|typical configs|0.7604|
+|vgg16 tf-faster-rcnn(source)|0.708|
+|vgg16 tf-faster-rcnn(load pre-trained model)|0.7106|
+|**vgg16 faster rcnn typical configs**|0.6935/0.6869/0.6751|
+|**resnet50 faster rcnn typical configs**|0.7294/0.7304|
+|resnet101 faster rcnn tf-faster-rcnn(source)|0.757|
+|resnet101 faster rcnn tf-faster-rcnn(load pre-trained model)|0.7578|
+|**resnet101 faster rcnn typical configs**|0.7456/0.7303/0.7247/0.7261|
+|resnet50 fpn FPN_Tensorflow(source)|0.7426|
+|resnet50 fpn FPN_Tensorflow(load pre-trained model)|0.7430|
+|**resnet50 fpn typical configs**|0.7465/0.7377/0.7392|
+|resnet101 fpn FPN_Tensorflow(source)|0.7614|
+|**resnet101 fpn typical configs**|0.7604/0.7618/0.7599|
 
 
 ---

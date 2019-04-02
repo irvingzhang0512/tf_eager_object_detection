@@ -3,7 +3,6 @@ import time
 import argparse
 import numpy as np
 import tensorflow as tf
-import math
 
 from object_detection.model.model_factory import model_factory
 from object_detection.config.config_factory import config_factory
@@ -12,7 +11,6 @@ from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as 
 from object_detection.dataset.coco_tf_dataset_generator import get_dataset as coco_get_dataset
 from tensorflow.contrib.summary import summary
 from tensorflow.contrib.eager.python import saver as eager_saver
-from tensorflow.contrib.memory_stats import MaxBytesInUse, BytesInUse, BytesLimit
 from tensorflow.python.platform import tf_logging
 from tqdm import tqdm
 
@@ -20,16 +18,6 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 tf_logging.set_verbosity(tf_logging.INFO)
 
 CONFIG = None
-
-
-def convert_size(size_bytes):
-    if size_bytes == 0:
-        return "0B"
-    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-    i = int(math.floor(math.log(size_bytes, 1024)))
-    p = math.pow(1024, i)
-    s = round(size_bytes / p, 2)
-    return "{} {}".format(s, size_name[i])
 
 
 def train_step(model, loss, tape, optimizer):
@@ -76,8 +64,8 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
     elif dataset_type == 'coco':
         dataset = coco_get_dataset(root_dir=data_root_path, mode='train',
                                    min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
-                                   preprocessing_type=preprocessing_type,
-                                   argument=False, )
+                                   preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
+                                   argument=True, )
     else:
         raise ValueError('unknown dataset type {}'.format(dataset_type))
     return dataset
@@ -160,11 +148,6 @@ def train_one_epoch(dataset, base_model, optimizer,
             tf_logging.info(logging_format % (idx + 1, show_lr,
                                               rpn_cls_loss, rpn_reg_loss, roi_cls_loss, roi_reg_loss,
                                               l2_loss, total_loss))
-            tf_logging.info('{}, {}, {}'.format(convert_size(MaxBytesInUse().numpy()),
-                                                convert_size(BytesLimit().numpy()),
-                                                convert_size(BytesInUse().numpy())
-                                                )
-                            )
 
         # saving
         if saver is not None and save_path is not None and idx % save_every_n_steps == 0 and idx != 0:

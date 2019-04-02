@@ -4,22 +4,41 @@ import tensorflow as tf
 from functools import partial
 from pycocotools.coco import COCO
 
-from object_detection.dataset.utils.tf_dataset_utils import image_argument_with_imgaug, preprocessing_func
-
+from object_detection.dataset.utils.tf_dataset_utils import image_argument_with_imgaug, preprocessing_training_func, \
+    preprocessing_eval_func
 
 _COCO_TRAIN_DATASET = None
 _COCO_VAL_DATASET = None
 _COCO_TEST_DATASET = None
 
 
+def _get_global_dataset(mode, root_dir):
+    global _COCO_TRAIN_DATASET, _COCO_VAL_DATASET, _COCO_TEST_DATASET
+    if mode not in ['train', 'val', 'test']:
+        raise ValueError('unknown mode {}'.format(mode))
+    if mode == 'train':
+        if _COCO_TRAIN_DATASET is None:
+            _COCO_TRAIN_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
+        coco_dataset = _COCO_TRAIN_DATASET
+    elif mode == 'val':
+        if _COCO_VAL_DATASET is None:
+            _COCO_VAL_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
+        coco_dataset = _COCO_VAL_DATASET
+    else:
+        if _COCO_TEST_DATASET is None:
+            _COCO_TEST_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
+        coco_dataset = _COCO_TEST_DATASET
+    return coco_dataset
+
+
 class CocoDataset:
     def __init__(self, root_dir='D:\\data\\COCO2017', sub_dir='train',
-                 min_edge=32,):
+                 min_edge=32, ):
         if sub_dir not in ['train', 'val']:
             raise ValueError('unknown sub dir {}'.format(sub_dir))
 
         annotation_file_path = os.path.join(root_dir, 'annotations', 'instances_{}2017.json'.format(sub_dir))
-        self._image_dir = os.path.join(root_dir, sub_dir+"2017")
+        self._image_dir = os.path.join(root_dir, sub_dir + "2017")
 
         self._coco = COCO(annotation_file=annotation_file_path)
         self._get_cat_id_name_dict()
@@ -110,7 +129,7 @@ class CocoDataset:
         # 获取 annotation dict 信息
         ann_ids = self._coco.getAnnIds(imgIds=img_id)
         ann_info = self._coco.loadAnns(ann_ids)
-        gt_bboxes, gt_labels, gt_labels_text = self._parse_ann_info(ann_info)
+        gt_bboxes, gt_labels, _ = self._parse_ann_info(ann_info)
 
         # 设置 bboxes 范围为 [0, 1]
         image_height, image_width = self._img_info_dict[img_id]['height'], self._img_info_dict[img_id]['width']
@@ -121,30 +140,16 @@ class CocoDataset:
         return file_path, gt_bboxes, image_height, image_width, gt_labels
 
 
-def get_dataset(root_dir='D:\\data\\COCO2017',
-                mode='train',
-                min_size=600, max_size=1000,
-                preprocessing_type='caffe',
-                batch_size=1,
-                repeat=1,
-                shuffle=False, shuffle_buffer_size=1000,
-                prefetch=False, prefetch_buffer_size=1000,
-                argument=True, iaa_sequence=None):
-    global _COCO_TRAIN_DATASET, _COCO_VAL_DATASET, _COCO_TEST_DATASET
-    if mode not in ['train', 'val', 'test']:
-        raise ValueError('unknown mode {}'.format(mode))
-    if mode == 'train':
-        if _COCO_TRAIN_DATASET is None:
-            _COCO_TRAIN_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
-        coco_dataset = _COCO_TRAIN_DATASET
-    elif mode == 'val':
-        if _COCO_VAL_DATASET is None:
-            _COCO_VAL_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
-        coco_dataset = _COCO_VAL_DATASET
-    else:
-        if _COCO_TEST_DATASET is None:
-            _COCO_TEST_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
-        coco_dataset = _COCO_TEST_DATASET
+def get_training_dataset(root_dir='D:\\data\\COCO2017',
+                         mode='train',
+                         min_size=600, max_size=1000,
+                         preprocessing_type='caffe', caffe_pixel_means=None,
+                         batch_size=1,
+                         repeat=1,
+                         shuffle=False, shuffle_buffer_size=1000,
+                         prefetch=False, prefetch_buffer_size=1000,
+                         argument=True, iaa_sequence=None):
+    coco_dataset = _get_global_dataset(mode, root_dir)
 
     def _parse_coco_data_py(img_id):
         file_path, gt_bboxes, image_height, image_width, gt_labels = coco_dataset[img_id]
@@ -155,9 +160,9 @@ def get_dataset(root_dir='D:\\data\\COCO2017',
                                           [tf.string, tf.float32, tf.int64, tf.int64, tf.int64])])
     )
     tf_dataset = tf_dataset.map(
-        lambda file_path, gt_bboxes, image_height, image_width, gt_labels, gt_labels_text: tuple([
+        lambda file_path, gt_bboxes, image_height, image_width, gt_labels: tuple([
             tf.image.decode_jpeg(tf.io.read_file(file_path), channels=3),
-            gt_bboxes, image_height, image_width, gt_labels, gt_labels_text
+            gt_bboxes, image_height, image_width, gt_labels
         ])
     )
 
@@ -170,9 +175,9 @@ def get_dataset(root_dir='D:\\data\\COCO2017',
             num_parallel_calls=5
         )
 
-    preprocessing_partial_func = partial(preprocessing_func,
+    preprocessing_partial_func = partial(preprocessing_training_func,
                                          min_size=min_size, max_size=max_size,
-                                         preprocessing_type=preprocessing_type)
+                                         preprocessing_type=preprocessing_type, caffe_pixel_means=caffe_pixel_means)
 
     tf_dataset = tf_dataset.batch(batch_size=batch_size).map(preprocessing_partial_func, num_parallel_calls=5)
 
@@ -180,5 +185,32 @@ def get_dataset(root_dir='D:\\data\\COCO2017',
         tf_dataset = tf_dataset.shuffle(buffer_size=shuffle_buffer_size)
     if prefetch:
         tf_dataset = tf_dataset.prefetch(buffer_size=prefetch_buffer_size)
+
+    return tf_dataset.repeat(repeat)
+
+
+def get_eval_dataset(root_dir='D:\\data\\COCO2017',
+                     mode='train',
+                     min_size=600, max_size=1000,
+                     preprocessing_type='caffe', caffe_pixel_means=None,
+                     batch_size=1,
+                     repeat=1,):
+    coco_dataset = _get_global_dataset(mode, root_dir)
+
+    def _parse_coco_data_py(img_id):
+        file_path, _, image_height, image_width, _ = coco_dataset[img_id]
+        img = tf.image.decode_jpeg(tf.io.read_file(file_path), channels=3)
+        return img, image_height, image_width
+
+    tf_dataset = tf.data.Dataset.from_tensor_slices(coco_dataset.img_ids).map(
+        lambda img_id: tuple([*tf.py_func(_parse_coco_data_py, [img_id],
+                                          [tf.uint8, tf.int64, tf.int64])])
+    )
+
+    preprocessing_partial_func = partial(preprocessing_eval_func,
+                                         min_size=min_size, max_size=max_size,
+                                         preprocessing_type=preprocessing_type, caffe_pixel_means=caffe_pixel_means)
+
+    tf_dataset = tf_dataset.batch(batch_size=batch_size).map(preprocessing_partial_func, num_parallel_calls=5)
 
     return tf_dataset.repeat(repeat)

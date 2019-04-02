@@ -19,17 +19,17 @@ def get_default_pascal_faster_rcnn_config():
         'extractor_stride': 16,
 
         # training configs
-        'learning_rate_multi_decay_steps': [50000],
+        'learning_rate_multi_decay_steps': [80000],  # 50000 for pascal 2007, 80000 for pascal 0712
         'learning_rate_multi_lrs': [1e-3, 1e-4],
         'learning_rate_bias_double': True,
         'optimizer_momentum': 0.9,
-        'epochs': 14,
+        'epochs': 8,  # 14 for pascal 2007, 8 for pascal 0712
 
         # preprocessing configs
         'image_max_size': 1000,
         'image_min_size': 600,
-        # 'bgr_pixel_means': [103.939, 116.779, 123.68],
-        'bgr_pixel_means': [102.9801, 115.9465, 122.7717],
+        'bgr_pixel_means': [103.939, 116.779, 123.68],
+        # 'bgr_pixel_means': [102.9801, 115.9465, 122.7717],  # for tf-faster-rcnn
 
         # predict & evaluate configs
         'evaluate_iou_threshold': 0.5,  # 计算map时使用，pred与gt的iou大于该阈值，则当前pred为TP，否则为FP
@@ -67,7 +67,7 @@ def get_default_pascal_faster_rcnn_config():
         # proposal target
         'roi_sigma': 1.0,
         'roi_pos_iou_threshold': 0.5,
-        'roi_neg_iou_threshold': 0.1,
+        'roi_neg_iou_threshold': 0.,
         'roi_total_sample_number': 128,
         'roi_pos_sample_max_number': 32,
 
@@ -95,17 +95,16 @@ def get_default_coco_faster_rcnn_config():
         'extractor_stride': 16,
 
         # training configs
-        'learning_rate_multi_decay_steps': [50000],
+        'learning_rate_multi_decay_steps': [470000],
         'learning_rate_multi_lrs': [1e-3, 1e-4],
         'learning_rate_bias_double': True,
         'optimizer_momentum': 0.9,
-        'epochs': 14,
+        'epochs': 6,
 
         # preprocessing configs
         'image_max_size': 1000,
         'image_min_size': 600,
-        # 'bgr_pixel_means': [103.939, 116.779, 123.68],
-        'bgr_pixel_means': [102.9801, 115.9465, 122.7717],
+        'bgr_pixel_means': [103.939, 116.779, 123.68],
 
         # predict & evaluate configs
         'evaluate_iou_threshold': 0.5,  # 计算map时使用，pred与gt的iou大于该阈值，则当前pred为TP，否则为FP
@@ -143,7 +142,7 @@ def get_default_coco_faster_rcnn_config():
         # proposal target
         'roi_sigma': 1.0,
         'roi_pos_iou_threshold': 0.5,
-        'roi_neg_iou_threshold': 0.1,
+        'roi_neg_iou_threshold': 0.,
         'roi_total_sample_number': 128,
         'roi_pos_sample_max_number': 32,
     }

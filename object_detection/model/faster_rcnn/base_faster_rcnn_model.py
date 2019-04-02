@@ -106,6 +106,7 @@ class BaseFasterRcnn(tf.keras.Model):
         self._roi_pooling = RoiPoolingCropAndResize(pool_size=roi_pool_size,
                                                     max_pooling_flag=roi_pooling_max_pooling_flag)
         self._proposal_target = ProposalTarget(
+            num_classes=num_classes,
             pos_iou_threshold=roi_training_pos_iou_threshold,
             neg_iou_threshold=roi_training_neg_iou_threshold,
             total_num_samples=roi_training_total_num_samples,
@@ -264,14 +265,14 @@ class BaseFasterRcnn(tf.keras.Model):
         return self._proposal_target((rois, gt_bboxes, gt_labels), training=True)
 
     def test_one_image(self, img_path, min_size=600, max_size=1000, preprocessing_type='caffe'):
-        from dataset.utils.tf_dataset_utils import preprocessing_func
+        from dataset.utils.tf_dataset_utils import preprocessing_training_func
         import numpy as np
         img = tf.image.decode_jpeg(tf.io.read_file(img_path))
         h, w = img.shape[:2]
         img = tf.reshape(img, [1, h, w, 3])
-        preprocessed_image, _, _, _ = preprocessing_func(img, np.zeros([1, 4], np.float32), h, w, None,
-                                                         min_size=min_size, max_size=max_size,
-                                                         preprocessing_type=preprocessing_type)
+        preprocessed_image, _, _, _ = preprocessing_training_func(img, np.zeros([1, 4], np.float32), h, w, None,
+                                                                  min_size=min_size, max_size=max_size,
+                                                                  preprocessing_type=preprocessing_type)
         bboxes, labels, scores = self(preprocessed_image, training=False)
         return bboxes, labels, scores
 

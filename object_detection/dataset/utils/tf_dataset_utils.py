@@ -4,7 +4,7 @@ from imgaug import augmenters as iaa
 import numpy as np
 from functools import partial
 
-__all__ = ['image_argument_with_imgaug', 'preprocessing_func', ]
+__all__ = ['image_argument_with_imgaug', 'preprocessing_training_func', 'preprocessing_eval_func']
 
 
 def _get_default_iaa_sequence():
@@ -80,20 +80,19 @@ def _tf_preprocessing(image):
     return tf.image.convert_image_dtype(image, dtype=tf.float32) * 2.0 - 1.0
 
 
-def preprocessing_func(image, bboxes, height, width, labels,
-                       min_size, max_size, preprocessing_type, caffe_pixel_means=None):
+def preprocessing_training_func(image, bboxes, height, width, labels,
+                                min_size, max_size, preprocessing_type, caffe_pixel_means=None):
     """
-    rescale image
-    1) 短边最短为600，长边最长为2000，矛盾时，优先满足长边2000
-    2) preprocessing
-    3) 通过 preprocessing_type 选择 preprocessing 函数
-    :param width:
-    :param height:
-    :param max_size:
-    :param min_size:
+    输入 rgb 图片，进行以下预处理
+    1) 短边最短为 min_size，长边最长为 max_size，矛盾时，优先满足长边
+    2) 通过 preprocessing_type 选择 preprocessing 函数
     :param image:
     :param bboxes:
+    :param width:
+    :param height:
     :param labels:
+    :param max_size:
+    :param min_size:
     :param preprocessing_type:
     :param caffe_pixel_means:
     :return:
@@ -125,3 +124,31 @@ def preprocessing_func(image, bboxes, height, width, labels,
     bboxes = tf.concat(channels, axis=-1)
 
     return image, bboxes, labels
+
+
+def preprocessing_eval_func(image, height, width,
+                            min_size, max_size, preprocessing_type, caffe_pixel_means=None):
+    """
+    输入 rgb 图片，进行以下预处理
+    1) 短边最短为 min_size，长边最长为 max_size，矛盾时，优先满足长边
+    2) 通过 preprocessing_type 选择 preprocessing 函数
+    """
+    if preprocessing_type == 'caffe':
+        preprocessing_fn = partial(_caffe_preprocessing, pixel_means=caffe_pixel_means)
+    elif preprocessing_type == 'tf':
+        preprocessing_fn = _tf_preprocessing
+    else:
+        raise ValueError('unknown preprocessing type {}'.format(preprocessing_type))
+    image = preprocessing_fn(image)
+
+    height = tf.to_float(height[0])
+    width = tf.to_float(width[0])
+    scale1 = min_size / tf.minimum(height, width)
+    scale2 = max_size / tf.maximum(height, width)
+    scale = tf.minimum(scale1, scale2)
+    n_height = tf.to_int32(scale * height)
+    n_width = tf.to_int32(scale * width)
+
+    image = tf.image.resize_bilinear(image, (n_height, n_width))
+
+    return image, scale, tf.to_int32(height), tf.to_int32(width)

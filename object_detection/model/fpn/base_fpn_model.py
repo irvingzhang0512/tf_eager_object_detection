@@ -132,6 +132,7 @@ class BaseFPN(tf.keras.Model):
             target_stds=rpn_proposal_stds,
         )
         self._proposal_target = ProposalTarget(
+            num_classes=num_classes,
             pos_iou_threshold=roi_training_pos_iou_threshold,
             neg_iou_threshold=roi_training_neg_iou_threshold,
             total_num_samples=roi_training_total_num_samples,

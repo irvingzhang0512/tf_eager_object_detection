@@ -1,7 +1,7 @@
 import tensorflow as tf
 from functools import partial
 
-from object_detection.dataset.utils.tf_dataset_utils import image_argument_with_imgaug, preprocessing_func
+from object_detection.dataset.utils.tf_dataset_utils import image_argument_with_imgaug, preprocessing_training_func
 
 __all__ = ['get_dataset']
 
@@ -90,7 +90,7 @@ def get_dataset(tf_records_list,
                 image_height, image_width, labels])
         )
 
-    preprocessing_partial_func = partial(preprocessing_func,
+    preprocessing_partial_func = partial(preprocessing_training_func,
                                          min_size=min_size, max_size=max_size,
                                          preprocessing_type=preprocessing_type,
                                          caffe_pixel_means=caffe_pixel_means)
