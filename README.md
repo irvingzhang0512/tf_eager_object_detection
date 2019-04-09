@@ -72,6 +72,7 @@
 ### 2.4. others
 + [x] BUG: after a few epochs, gpu memory will boomed twice... #issue 27288
 + [ ] jupyter samples.
++ [ ] add global step in restore variables.
 
 ---
 

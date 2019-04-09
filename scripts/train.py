@@ -8,7 +8,7 @@ from object_detection.model.model_factory import model_factory
 from object_detection.config.config_factory import config_factory
 from object_detection.utils.visual_utils import show_one_image
 from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as pascal_get_dataset
-from object_detection.dataset.coco_tf_dataset_generator import get_dataset as coco_get_dataset
+from object_detection.dataset.coco_tf_dataset_generator import get_training_dataset as coco_get_dataset
 from tensorflow.contrib.summary import summary
 from tensorflow.contrib.eager.python import saver as eager_saver
 from tensorflow.python.platform import tf_logging
@@ -172,18 +172,17 @@ def train(training_dataset,
           restore_ckpt_file_path,
           ):
     # 获取 pretrained model
-    saver = eager_saver.Saver(base_model.variables)
+    variables = base_model.variables + [tf.train.get_or_create_global_step()]
+    saver = eager_saver.Saver(variables)
 
     # 命令行指定 ckpt file
     if restore_ckpt_file_path is not None:
         saver.restore(restore_ckpt_file_path)
 
     # 当前 logs_dir 中的预训练模型，用于继续训练
-    print(ckpt_dir)
     if tf.train.latest_checkpoint(ckpt_dir) is not None:
         saver.restore(tf.train.latest_checkpoint(ckpt_dir))
 
-    tf.train.get_or_create_global_step()
     train_writer = tf.contrib.summary.create_file_writer(train_dir, flush_millis=100000)
     for i in range(CONFIG['epochs']):
         tf_logging.info('epoch %d starting...' % (i + 1))

@@ -52,6 +52,10 @@
 + image width:
     + dtype: `tf.int32` or `tf.int64`
     + shape: `[1,]`
++ image_id:
+    + dtype: `tf.float32`
+    + shape: `[1,]`
+    + PS: for COCO dataset only. used in coco eval tools.
 
 ### 2.2. data flow
 + input: rgb uint8 raw image.

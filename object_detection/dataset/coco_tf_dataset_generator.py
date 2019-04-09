@@ -212,5 +212,7 @@ def get_eval_dataset(root_dir='D:\\data\\COCO2017',
                                          preprocessing_type=preprocessing_type, caffe_pixel_means=caffe_pixel_means)
 
     tf_dataset = tf_dataset.batch(batch_size=batch_size).map(preprocessing_partial_func, num_parallel_calls=5)
+    image_id_dataset = tf.data.Dataset.from_tensor_slices(coco_dataset.img_ids).batch(batch_size=batch_size)
+    final_dataset = tf.data.Dataset.zip([tf_dataset, image_id_dataset]).repeat(repeat)
 
-    return tf_dataset.repeat(repeat)
+    return final_dataset
