@@ -4,7 +4,7 @@ from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as 
 from object_detection.dataset.eval_pascal_tf_dataset import get_dataset_by_local_file as get_pascal_eval_dataset
 
 
-def dataset_factory(dataset_type, mode, **configs):
+def dataset_factory(dataset_type, mode, configs):
     if dataset_type == 'pascal':
         if mode == 'train':
             return get_pascal_train_dataset(**configs)
@@ -15,7 +15,7 @@ def dataset_factory(dataset_type, mode, **configs):
     if dataset_type == 'coco':
         if mode == 'train':
             return get_coco_train_dataset(**configs)
-        elif mode == 'test':
+        elif mode == 'val':
             return get_coco_eval_dataset(**configs)
         raise ValueError('unknown mode {} for dataset type {}'.format(mode, dataset_type))
 

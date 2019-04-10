@@ -194,25 +194,25 @@ def get_eval_dataset(root_dir='D:\\data\\COCO2017',
                      min_size=600, max_size=1000,
                      preprocessing_type='caffe', caffe_pixel_means=None,
                      batch_size=1,
-                     repeat=1,):
+                     repeat=1, ):
     coco_dataset = _get_global_dataset(mode, root_dir)
-
-    def _parse_coco_data_py(img_id):
-        file_path, _, image_height, image_width, _ = coco_dataset[img_id]
-        img = tf.image.decode_jpeg(tf.io.read_file(file_path), channels=3)
-        return img, image_height, image_width
-
-    tf_dataset = tf.data.Dataset.from_tensor_slices(coco_dataset.img_ids).map(
-        lambda img_id: tuple([*tf.py_func(_parse_coco_data_py, [img_id],
-                                          [tf.uint8, tf.int64, tf.int64])])
-    )
 
     preprocessing_partial_func = partial(preprocessing_eval_func,
                                          min_size=min_size, max_size=max_size,
                                          preprocessing_type=preprocessing_type, caffe_pixel_means=caffe_pixel_means)
 
-    tf_dataset = tf_dataset.batch(batch_size=batch_size).map(preprocessing_partial_func, num_parallel_calls=5)
-    image_id_dataset = tf.data.Dataset.from_tensor_slices(coco_dataset.img_ids).batch(batch_size=batch_size)
-    final_dataset = tf.data.Dataset.zip([tf_dataset, image_id_dataset]).repeat(repeat)
+    def _parse_coco_data_py(img_id):
+        file_path, _, img_height, img_width, _ = coco_dataset[img_id]
+        img = tf.image.decode_jpeg(tf.io.read_file(file_path), channels=3)
+        return img, img_height, img_width, img_id
 
-    return final_dataset
+    def _preprocessing_after_batch(img, img_height, img_width, img_id):
+        img, img_scale, img_height, img_width = preprocessing_partial_func(img, img_height, img_width)
+        return img, img_scale, img_height, img_width, img_id[0]
+
+    tf_dataset = tf.data.Dataset.from_tensor_slices(coco_dataset.img_ids).map(
+        lambda img_id: tuple([*tf.py_func(_parse_coco_data_py, [img_id],
+                                          [tf.uint8, tf.int64, tf.int64, tf.int32])])
+    ).batch(batch_size).map(_preprocessing_after_batch)
+
+    return tf_dataset.repeat(repeat)

@@ -2,3 +2,4 @@
 *pb2.py
 .ipynb_checkpoints/
 logs*
+./pycocotools
