@@ -54,22 +54,36 @@ class CocoDataset:
 
     @property
     def cat_id_to_name_dict(self):
-        return self._id_to_name_dict
+        return self._cat_id_to_name_dict
 
     @property
-    def cat_name_to_id_dict(self):
-        return self._name_to_id_dict
+    def name_to_cat_id_dict(self):
+        return self._name_to_cat_id_dict
+
+    @property
+    def cat_id_to_raw_id(self):
+        return self._cat_id_to_raw_id
+
+    @property
+    def raw_id_to_cat_id(self):
+        return self._raw_id_to_cat_id
 
     def _get_cat_id_name_dict(self):
         cat_ids = self._coco.getCatIds()
-        id_to_name = {0: 'background'}
-        name_to_id = {'background': 0}
-        for cat_id in cat_ids:
+        cat_id_to_name = {0: 'background'}
+        name_to_cat_id = {'background': 0}
+        cat_id_to_raw_id = {}
+        raw_id_to_cat_id = {}
+        for idx, cat_id in enumerate(cat_ids):
             cat_name = self._coco.loadCats(cat_id)[0]['name']
-            id_to_name[cat_id] = cat_name
-            name_to_id[cat_name] = cat_id
-        self._id_to_name_dict = id_to_name
-        self._name_to_id_dict = name_to_id
+            cat_id_to_name[cat_id] = cat_name
+            name_to_cat_id[cat_name] = cat_id
+            cat_id_to_raw_id[cat_id] = idx
+            raw_id_to_cat_id[idx] = cat_id
+        self._cat_id_to_name_dict = cat_id_to_name
+        self._name_to_cat_id_dict = name_to_cat_id
+        self._cat_id_to_raw_id = cat_id_to_raw_id
+        self._raw_id_to_cat_id = raw_id_to_cat_id
 
     def _filter_images(self, min_edge):
         all_img_ids = list(set([_['image_id'] for _ in self._coco.anns.values()]))
@@ -111,8 +125,8 @@ class CocoDataset:
                 continue
             bbox = [y1, x1, y1 + h - 1, x1 + w - 1]
             gt_bboxes.append(bbox)
-            gt_labels.append(ann['category_id'])
-            gt_labels_text.append(self._id_to_name_dict[ann['category_id']])
+            gt_labels.append(self._cat_id_to_raw_id[ann['category_id']])
+            gt_labels_text.append(self._cat_id_to_name_dict[ann['category_id']])
 
         if gt_bboxes:
             gt_bboxes = np.array(gt_bboxes, dtype=np.float32)

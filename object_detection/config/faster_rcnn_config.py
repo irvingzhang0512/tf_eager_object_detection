@@ -86,7 +86,7 @@ def get_default_coco_faster_rcnn_config():
         'resnet_roi_pooling_max_pooling_flag': False,
 
         # base configs
-        'num_classes': 91,
+        'num_classes': 81,
         'weight_decay': 0.0001,
 
         # anchors configs

@@ -292,17 +292,32 @@ class ResNetFasterRcnn(BaseFasterRcnn):
     def _get_extractor(self):
         return get_resnet_v1_extractor(depth=self._depth, weight_decay=self.weight_decay)
 
-    def load_tf_faster_rcnn_tf_weights(self, ckpt_file_path):
+    def load_tf_faster_rcnn_tf_weights(self, ckpt_file_path, depth=50):
+        backbone_name = 'resnet{}'.format(depth)
+        ckpt_file_pre = 'resnet_v1_{}'.format(depth)
+        if depth == 50:
+            conv2_length = 3
+            conv3_length = 4
+            conv4_length = 6
+            conv5_length = 3
+        elif depth == 101:
+            conv2_length = 3
+            conv3_length = 4
+            conv4_length = 23
+            conv5_length = 3
+        else:
+            raise ValueError('unknown depth {}'.format(depth))
+
         reader = tf.train.load_checkpoint(ckpt_file_path)
 
-        extractor = self.get_layer('resnet101')
+        extractor = self.get_layer(backbone_name)
         extractor_dict = {
-            "resnet_v1_101/conv1/": "conv1_conv",
-            "resnet_v1_101/conv1/BatchNorm/": "conv1_bn",
+            "{}/conv1/".format(ckpt_file_pre): "conv1_conv",
+            "{}/conv1/BatchNorm/".format(ckpt_file_pre): "conv1_bn",
         }
 
         keras_format = '{}_{}_{}_{}'  # conv5_block1_0_bn
-        ckpt_format = 'resnet_v1_101/{}/{}/bottleneck_v1/{}/{}'  # resnet_v1_101/block3/unit_1/bottleneck_v1/conv3/
+        ckpt_format = '%s/{}/{}/bottleneck_v1/{}/{}' % ckpt_file_pre  # resnet_v1_101/block3/unit_1/bottleneck_v1/conv3/
 
         # block1 - unit_1 - shortcut
         # conv2 - block1 - 0
@@ -313,7 +328,7 @@ class ResNetFasterRcnn(BaseFasterRcnn):
                                                                                                      0, 'conv')
         # block1 - unit_1-3 - conv1-3
         # conv2 - block1-3 - 1-3
-        for i in range(1, 4):
+        for i in range(1, conv2_length + 1):
             for j in range(1, 4):
                 key = ckpt_format.format('block1', 'unit_%d' % i, 'conv%d' % j, '')
                 value = keras_format.format('conv2', 'block%d' % i, j, 'conv')
@@ -331,7 +346,7 @@ class ResNetFasterRcnn(BaseFasterRcnn):
                                                                                                      0, 'conv')
         # block2 unit_1-4 conv1-3
         # conv3 block1-4 1-3
-        for i in range(1, 5):
+        for i in range(1, conv3_length + 1):
             for j in range(1, 4):
                 key = ckpt_format.format('block2', 'unit_%d' % i, 'conv%d' % j, '')
                 value = keras_format.format('conv3', 'block%d' % i, j, 'conv')
@@ -349,7 +364,7 @@ class ResNetFasterRcnn(BaseFasterRcnn):
                                                                                                      0, 'conv')
         # block3 unit_1-23 conv1-3
         # conv4 block1-23 1-3
-        for i in range(1, 24):
+        for i in range(1, conv4_length + 1):
             for j in range(1, 4):
                 key = ckpt_format.format('block3', 'unit_%d' % i, 'conv%d' % j, '')
                 value = keras_format.format('conv4', 'block%d' % i, j, 'conv')
@@ -376,9 +391,9 @@ class ResNetFasterRcnn(BaseFasterRcnn):
 
         rpn_head = self.get_layer('rpn_head')
         rpn_head_dict = {
-            "resnet_v1_101/rpn_conv/3x3/": "rpn_first_conv",
-            "resnet_v1_101/rpn_cls_score/": "rpn_score_conv",
-            "resnet_v1_101/rpn_bbox_pred/": "rpn_bbox_conv",
+            "{}/rpn_conv/3x3/".format(ckpt_file_pre): "rpn_first_conv",
+            "{}/rpn_cls_score/".format(ckpt_file_pre): "rpn_score_conv",
+            "{}/rpn_bbox_pred/".format(ckpt_file_pre): "rpn_bbox_conv",
         }
         for tf_faster_rcnn_name_pre in rpn_head_dict.keys():
             rpn_head.get_layer(name=rpn_head_dict[tf_faster_rcnn_name_pre]).set_weights([
@@ -387,34 +402,28 @@ class ResNetFasterRcnn(BaseFasterRcnn):
             ])
             tf.logging.info('successfully loaded weights for {}'.format(rpn_head_dict[tf_faster_rcnn_name_pre]))
 
-        roi_head = self.get_layer('resnet101_roi_head')
-        roi_head_dict = {
-            "resnet_v1_101/cls_score/": "roi_head_score",
-            "resnet_v1_101/bbox_pred/": "roi_head_bboxes",
+        roi_head = self.get_layer('{}_roi_head'.format(backbone_name))
+        roi_head_dict = {"{}/cls_score/".format(ckpt_file_pre): "roi_head_score",
+                         "{}/bbox_pred/".format(ckpt_file_pre): "roi_head_bboxes",
 
-            "resnet_v1_101/block4/unit_1/bottleneck_v1/shortcut/": "conv5_block1_0_conv",
-            "resnet_v1_101/block4/unit_1/bottleneck_v1/shortcut/BatchNorm/": "conv5_block1_0_bn",
-            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv1/": "conv5_block1_1_conv",
-            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv1/BatchNorm/": "conv5_block1_1_bn",
-            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv2/": "conv5_block1_2_conv",
-            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv2/BatchNorm/": "conv5_block1_2_bn",
-            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv3/": "conv5_block1_3_conv",
-            "resnet_v1_101/block4/unit_1/bottleneck_v1/conv3/BatchNorm/": "conv5_block1_3_bn",
+                         # block4 - unit_1 - shortcut
+                         # conv5 block1 0
+                         ckpt_format.format('block4', 'unit_1', 'shortcut', 'BatchNorm/'): keras_format.format('conv5',
+                                                                                                               'block1',
+                                                                                                               0, 'bn'),
+                         ckpt_format.format('block4', 'unit_1', 'shortcut', ''): keras_format.format('conv5', 'block1',
+                                                                                                     0, 'conv')}
+        # block4 unit_1-3 conv1-3
+        # conv5 block1-3 1-3
+        for i in range(1, conv5_length + 1):
+            for j in range(1, 4):
+                key = ckpt_format.format('block4', 'unit_%d' % i, 'conv%d' % j, '')
+                value = keras_format.format('conv5', 'block%d' % i, j, 'conv')
+                roi_head_dict[key] = value
+                key = ckpt_format.format('block4', 'unit_%d' % i, 'conv%d' % j, 'BatchNorm/')
+                value = keras_format.format('conv5', 'block%d' % i, j, 'bn')
+                roi_head_dict[key] = value
 
-            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv1/": "conv5_block2_1_conv",
-            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv1/BatchNorm/": "conv5_block2_1_bn",
-            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv2/": "conv5_block2_2_conv",
-            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv2/BatchNorm/": "conv5_block2_2_bn",
-            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv3/": "conv5_block2_3_conv",
-            "resnet_v1_101/block4/unit_2/bottleneck_v1/conv3/BatchNorm/": "conv5_block2_3_bn",
-
-            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv1/": "conv5_block3_1_conv",
-            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv1/BatchNorm/": "conv5_block3_1_bn",
-            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv2/": "conv5_block3_2_conv",
-            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv2/BatchNorm/": "conv5_block3_2_bn",
-            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv3/": "conv5_block3_3_conv",
-            "resnet_v1_101/block4/unit_3/bottleneck_v1/conv3/BatchNorm/": "conv5_block3_3_bn",
-        }
         for tf_faster_rcnn_name_pre in roi_head_dict.keys():
             if 'BatchNorm' in tf_faster_rcnn_name_pre:
                 cur_weights = [

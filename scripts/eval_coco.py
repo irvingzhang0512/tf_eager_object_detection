@@ -17,7 +17,49 @@ from pycocotools.cocoeval import COCOeval
 
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-num_classes = 91
+num_classes = 81
+
+coco_id_to_name_list = [
+        'back_ground', 'person', 'bicycle', 'car', 'motorcycle',
+        'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
+        'fire hydrant', 'stop sign', 'parking meter', 'bench',
+        'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant',
+        'bear', 'zebra', 'giraffe', 'backpack', 'umbrella',
+        'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard',
+        'sports ball', 'kite', 'baseball bat', 'baseball glove',
+        'skateboard', 'surfboard', 'tennis racket', 'bottle',
+        'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
+        'banana', 'apple', 'sandwich', 'orange', 'broccoli',
+        'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair',
+        'couch', 'potted plant', 'bed', 'dining table', 'toilet',
+        'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
+        'microwave', 'oven', 'toaster', 'sink', 'refrigerator',
+        'book', 'clock', 'vase', 'scissors', 'teddy bear',
+        'hair drier', 'toothbrush']
+
+coco_name_to_cat_id_dict = {
+    'back_ground': 0,
+    'person': 1, 'bicycle': 2, 'car': 3, 'motorcycle': 4,
+    'airplane': 5, 'bus': 6, 'train': 7, 'truck': 8, 'boat': 9,
+    'traffic light': 10, 'fire hydrant': 11, 'stop sign': 13,
+    'parking meter': 14, 'bench': 15, 'bird': 16, 'cat': 17,
+    'dog': 18, 'horse': 19, 'sheep': 20, 'cow': 21, 'elephant': 22,
+    'bear': 23, 'zebra': 24, 'giraffe': 25, 'backpack': 27,
+    'umbrella': 28, 'handbag': 31, 'tie': 32, 'suitcase': 33,
+    'frisbee': 34, 'skis': 35, 'snowboard': 36, 'sports ball': 37,
+    'kite': 38, 'baseball bat': 39, 'baseball glove': 40,
+    'skateboard': 41, 'surfboard': 42, 'tennis racket': 43,
+    'bottle': 44, 'wine glass': 46, 'cup': 47, 'fork': 48,
+    'knife': 49, 'spoon': 50, 'bowl': 51, 'banana': 52, 'apple': 53,
+    'sandwich': 54, 'orange': 55, 'broccoli': 56, 'carrot': 57,
+    'hot dog': 58, 'pizza': 59, 'donut': 60, 'cake': 61,
+    'chair': 62, 'couch': 63, 'potted plant': 64, 'bed': 65,
+    'dining table': 67, 'toilet': 70, 'tv': 72, 'laptop': 73,
+    'mouse': 74, 'remote': 75, 'keyboard': 76, 'cell phone': 77,
+    'microwave': 78, 'oven': 79, 'toaster': 80, 'sink': 81,
+    'refrigerator': 82, 'book': 84, 'clock': 85, 'vase': 86,
+    'scissors': 87, 'teddy bear': 88, 'hair drier': 89,
+    'toothbrush': 90}
 
 
 def eval_by_cocotools(res_file_path, mode, root_path):
@@ -71,7 +113,7 @@ def eval_coco(model,
 
     res_list = []
     for img, img_scale, raw_h, raw_w, img_id in dataset:
-        final_bboxes, final_category, final_scores = model(img, False)
+        final_bboxes, final_labels, final_scores = model(img, False)
         final_bboxes = final_bboxes / tf.to_float(img_scale)
 
         # scores, roi_txtytwth, rois = model.im_detect(img, img_scale)
@@ -110,11 +152,12 @@ def eval_coco(model,
         # final_category = tf.gather(category_after_nms, final_idx).numpy()
         # final_scores = final_scores.numpy()
 
-        for cur_bbox, cur_category, cur_score in zip(final_bboxes, final_category, final_scores):
+        for cur_bbox, cur_label, cur_score in zip(final_bboxes, final_labels, final_scores):
             res_list.append({
                 'image_id': int(img_id),
-                'category_id': int(cur_category),
-                'bbox': [float(cur_bbox[1]), float(cur_bbox[0]), float(cur_bbox[3]), float(cur_bbox[2])],
+                'category_id': int(coco_name_to_cat_id_dict[coco_id_to_name_list[cur_label]]),
+                'bbox': [float(cur_bbox[0]), float(cur_bbox[1]),
+                         float(cur_bbox[2] - cur_bbox[0] + 1), float(cur_bbox[3] - cur_bbox[1] + 1)],
                 'score': float(cur_score)
             })
 
