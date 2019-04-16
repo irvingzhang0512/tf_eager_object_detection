@@ -12,33 +12,37 @@ _COCO_VAL_DATASET = None
 _COCO_TEST_DATASET = None
 
 
-def _get_global_dataset(mode, root_dir):
+def _get_global_dataset(mode, year, root_dir):
     global _COCO_TRAIN_DATASET, _COCO_VAL_DATASET, _COCO_TEST_DATASET
-    if mode not in ['train', 'val', 'test']:
+    if mode not in ['train', 'val', 'test', 'minival']:
         raise ValueError('unknown mode {}'.format(mode))
     if mode == 'train':
         if _COCO_TRAIN_DATASET is None:
-            _COCO_TRAIN_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
+            _COCO_TRAIN_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode, year=year)
         coco_dataset = _COCO_TRAIN_DATASET
     elif mode == 'val':
         if _COCO_VAL_DATASET is None:
-            _COCO_VAL_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
+            _COCO_VAL_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode, year=year)
         coco_dataset = _COCO_VAL_DATASET
     else:
         if _COCO_TEST_DATASET is None:
-            _COCO_TEST_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode)
+            _COCO_TEST_DATASET = CocoDataset(root_dir=root_dir, sub_dir=mode, year=year)
         coco_dataset = _COCO_TEST_DATASET
     return coco_dataset
 
 
 class CocoDataset:
-    def __init__(self, root_dir='D:\\data\\COCO2017', sub_dir='train',
+    def __init__(self, root_dir='D:\\data\\COCO2017', sub_dir='train', year="2017",
                  min_edge=32, ):
-        if sub_dir not in ['train', 'val']:
+        if sub_dir not in ['train', 'val', 'minival']:
             raise ValueError('unknown sub dir {}'.format(sub_dir))
+        if year not in ['2014', '2017']:
+            raise ValueError('unknown year dir {}'.format(year))
 
-        annotation_file_path = os.path.join(root_dir, 'annotations', 'instances_{}2017.json'.format(sub_dir))
-        self._image_dir = os.path.join(root_dir, sub_dir + "2017")
+        annotation_file_path = os.path.join(root_dir, 'annotations', 'instances_{}{}.json'.format(sub_dir, year))
+        if sub_dir == 'minival':
+            sub_dir = 'val'
+        self._image_dir = os.path.join(root_dir, sub_dir + year)
 
         self._coco = COCO(annotation_file=annotation_file_path)
         self._get_cat_id_name_dict()
@@ -123,7 +127,7 @@ class CocoDataset:
             x1, y1, w, h = ann['bbox']
             if ann['area'] <= 0 or w < 1 or h < 1:
                 continue
-            bbox = [y1, x1, y1 + h - 1, x1 + w - 1]
+            bbox = [y1, x1, np.min(y1 + h - 1, h-1), np.min(x1 + w - 1, w-1)]
             gt_bboxes.append(bbox)
             gt_labels.append(self._cat_id_to_raw_id[ann['category_id']])
             gt_labels_text.append(self._cat_id_to_name_dict[ann['category_id']])
@@ -155,7 +159,7 @@ class CocoDataset:
 
 
 def get_training_dataset(root_dir='D:\\data\\COCO2017',
-                         mode='train',
+                         mode='train', year="2017",
                          min_size=600, max_size=1000,
                          preprocessing_type='caffe', caffe_pixel_means=None,
                          batch_size=1,
@@ -163,7 +167,7 @@ def get_training_dataset(root_dir='D:\\data\\COCO2017',
                          shuffle=False, shuffle_buffer_size=1000,
                          prefetch=False, prefetch_buffer_size=1000,
                          argument=True, iaa_sequence=None):
-    coco_dataset = _get_global_dataset(mode, root_dir)
+    coco_dataset = _get_global_dataset(mode, year, root_dir)
 
     def _parse_coco_data_py(img_id):
         file_path, gt_bboxes, image_height, image_width, gt_labels = coco_dataset[img_id]
@@ -204,12 +208,12 @@ def get_training_dataset(root_dir='D:\\data\\COCO2017',
 
 
 def get_eval_dataset(root_dir='D:\\data\\COCO2017',
-                     mode='train',
+                     mode='train', year='2017',
                      min_size=600, max_size=1000,
                      preprocessing_type='caffe', caffe_pixel_means=None,
                      batch_size=1,
                      repeat=1, ):
-    coco_dataset = _get_global_dataset(mode, root_dir)
+    coco_dataset = _get_global_dataset(mode, year, root_dir)
 
     preprocessing_partial_func = partial(preprocessing_eval_func,
                                          min_size=min_size, max_size=max_size,

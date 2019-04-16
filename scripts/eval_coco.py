@@ -76,6 +76,7 @@ def eval_by_cocotools(res_file_path, mode, root_path):
 def eval_coco(model,
               result_file_path,
               dataset_mode,
+              dataset_year,
               image_format,
               preprocessing_type,
               root_path,
@@ -105,7 +106,7 @@ def eval_coco(model,
     :return:
     """
     dataset_configs = {'root_dir': root_path,
-                       'mode': dataset_mode,
+                       'mode': dataset_mode, 'year': dataset_year,
                        'min_size': config['image_max_size'], 'max_size': config['image_min_size'],
                        'preprocessing_type': preprocessing_type,
                        'caffe_pixel_means': config['bgr_pixel_means']}
@@ -179,6 +180,7 @@ def _load_from_ckpt_file(model, ckpt_file_path):
 def parse_args():
     parser = argparse.ArgumentParser(description='Evaluate a Fast R-CNN model')
     parser.add_argument('ckpt_file_path', type=str, help='target ckpt file path', )
+    parser.add_argument('--year', type=str, default=['2014', '2017'], help='one of [2014, 2017]', )
 
     parser.add_argument('--gpu_id', type=str, default='0')
 

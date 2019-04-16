@@ -104,7 +104,8 @@ def get_default_coco_faster_rcnn_config():
         # preprocessing configs
         'image_max_size': 1000,
         'image_min_size': 600,
-        'bgr_pixel_means': [103.939, 116.779, 123.68],
+        # 'bgr_pixel_means': [103.939, 116.779, 123.68],
+        'bgr_pixel_means': [102.9801, 115.9465, 122.7717],  # for tf-faster-rcnn
 
         # predict & evaluate configs
         'evaluate_iou_threshold': 0.5,  # 计算map时使用，pred与gt的iou大于该阈值，则当前pred为TP，否则为FP

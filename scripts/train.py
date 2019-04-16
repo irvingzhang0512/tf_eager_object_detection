@@ -52,6 +52,7 @@ def _get_default_optimizer(use_adam):
 
 
 def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
+                          coco_year="2017",
                           pascal_year="2007", pascal_mode='trainval', pascal_tf_records_num=5,
                           data_root_path=None):
     if dataset_type == 'pascal':
@@ -62,7 +63,7 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
                                      preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
                                      argument=True)
     elif dataset_type == 'coco':
-        dataset = coco_get_dataset(root_dir=data_root_path, mode='train',
+        dataset = coco_get_dataset(root_dir=data_root_path, mode='train', year=coco_year,
                                    min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
                                    preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
                                    argument=True, )
@@ -212,6 +213,11 @@ def parse_args():
                         help='one of [vgg16, resnet50, resnet101, resnet152]')
 
     parser.add_argument('--data_type', default="pascal", type=str, help='pascal or coco')
+
+    # coco
+    parser.add_argument('--coco_year', default="2017", type=str, help='one of [2014, 2017]')
+
+    # pascal
     parser.add_argument('--pascal_year', default="2007", type=str, help='one of [2007, 2012, 0712]')
     parser.add_argument('--pascal_mode', default="trainval", type=str, help='one of [trainval, train, val]')
     parser.add_argument('--pascal_tf_records_num', default=5, type=int, help='number of pascal tf records')
@@ -265,6 +271,7 @@ def main(args):
     # 开始训练
     train(training_dataset=_get_training_dataset(preprocessing_type=preprocessing_type,
                                                  dataset_type=args.data_type,
+                                                 coco_year=args.coco_year,
                                                  pascal_year=args.pascal_year,
                                                  pascal_mode=args.pascal_mode,
                                                  pascal_tf_records_num=args.pascal_tf_records_num,
