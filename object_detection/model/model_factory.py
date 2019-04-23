@@ -78,7 +78,7 @@ def _get_fpn_resnet_model(depth, config):
 
         prediction_max_objects_per_image=config['max_objects_per_image'],
         prediction_max_objects_per_class=config['max_objects_per_class_per_image'],
-        prediction_nms_iou_threshold=config['predictions_nms_iou_threshold'],
+        prediction_nms_iou_threshold=config['prediction_nms_iou_threshold'],
         prediction_score_threshold=config['prediction_score_threshold'],
     )
 
@@ -124,7 +124,7 @@ def _get_faster_rcnn_resnet_model(depth, config):
 
         prediction_max_objects_per_image=config['max_objects_per_image'],
         prediction_max_objects_per_class=config['max_objects_per_class_per_image'],
-        prediction_nms_iou_threshold=config['predictions_nms_iou_threshold'],
+        prediction_nms_iou_threshold=config['prediction_nms_iou_threshold'],
         prediction_score_threshold=config['prediction_score_threshold'],
     )
 
@@ -171,6 +171,6 @@ def _get_faster_rcnn_vgg16_model(slim_ckpt_file_path, config):
 
         prediction_max_objects_per_image=config['max_objects_per_image'],
         prediction_max_objects_per_class=config['max_objects_per_class_per_image'],
-        prediction_nms_iou_threshold=config['predictions_nms_iou_threshold'],
+        prediction_nms_iou_threshold=config['prediction_nms_iou_threshold'],
         prediction_score_threshold=config['prediction_score_threshold'],
     )

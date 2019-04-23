@@ -32,7 +32,7 @@ def _get_global_dataset(mode, year, root_dir):
 
 
 class CocoDataset:
-    def __init__(self, root_dir='D:\\data\\COCO2017', sub_dir='train', year="2017",
+    def __init__(self, root_dir='/ssd/zhangyiyang/COCO2017', sub_dir='train', year="2017",
                  min_edge=32, ):
         if sub_dir not in ['train', 'val', 'minival']:
             raise ValueError('unknown sub dir {}'.format(sub_dir))
@@ -82,8 +82,8 @@ class CocoDataset:
             cat_name = self._coco.loadCats(cat_id)[0]['name']
             cat_id_to_name[cat_id] = cat_name
             name_to_cat_id[cat_name] = cat_id
-            cat_id_to_raw_id[cat_id] = idx
-            raw_id_to_cat_id[idx] = cat_id
+            cat_id_to_raw_id[cat_id] = idx + 1
+            raw_id_to_cat_id[idx + 1] = cat_id
         self._cat_id_to_name_dict = cat_id_to_name
         self._name_to_cat_id_dict = name_to_cat_id
         self._cat_id_to_raw_id = cat_id_to_raw_id
@@ -127,7 +127,7 @@ class CocoDataset:
             x1, y1, w, h = ann['bbox']
             if ann['area'] <= 0 or w < 1 or h < 1:
                 continue
-            bbox = [y1, x1, np.min(y1 + h - 1, h-1), np.min(x1 + w - 1, w-1)]
+            bbox = [y1, x1, min(y1 + h - 1., h-1.), min(x1 + w - 1., w-1.)]
             gt_bboxes.append(bbox)
             gt_labels.append(self._cat_id_to_raw_id[ann['category_id']])
             gt_labels_text.append(self._cat_id_to_name_dict[ann['category_id']])

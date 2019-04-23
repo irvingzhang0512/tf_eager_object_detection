@@ -94,6 +94,14 @@
 |resnet101 fpn FPN_Tensorflow(source)|0.7614|
 |**resnet101 fpn typical configs**|0.7604/0.7618/0.7599|
 
+### 3.2. COCO 2014 minival
+| Models | mAP |
+|:------:|:-----:|
+|vgg16 tf-faster-rcnn(source)|0.302|
+|vgg16 tf-faster-rcnn(load pre-trained model)|0.302|
+|resnet50 tf-faster-rcnn(source)|0.324|
+|resnet50 tf-faster-rcnn(load pre-trained model)|0.324|
+
 
 ---
 

@@ -7,8 +7,7 @@ import tensorflow as tf
 from object_detection.model.model_factory import model_factory
 from object_detection.config.config_factory import config_factory
 from object_detection.utils.visual_utils import show_one_image
-from object_detection.dataset.pascal_tf_dataset_generator import get_dataset as pascal_get_dataset
-from object_detection.dataset.coco_tf_dataset_generator import get_training_dataset as coco_get_dataset
+from object_detection.dataset.dataset_factory import dataset_factory
 from tensorflow.contrib.summary import summary
 from tensorflow.contrib.eager.python import saver as eager_saver
 from tensorflow.python.platform import tf_logging
@@ -58,15 +57,18 @@ def _get_training_dataset(preprocessing_type='caffe', dataset_type='pascal',
     if dataset_type == 'pascal':
         base_pattern = 'pascal_{}_{}_%02d.tfrecords'.format(pascal_year, pascal_mode)
         file_names = [os.path.join(data_root_path, base_pattern % i) for i in range(pascal_tf_records_num)]
-        dataset = pascal_get_dataset(file_names,
-                                     min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
-                                     preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
-                                     argument=True)
+        dataset_configs = {'tf_records_list': file_names,
+                           'min_size': CONFIG['image_min_size'], 'max_size': CONFIG['image_max_size'],
+                           'preprocessing_type': preprocessing_type, 'caffe_pixel_means': CONFIG['bgr_pixel_means'],
+                           'argument': True, }
+        dataset = dataset_factory('pascal', 'train', dataset_configs)
     elif dataset_type == 'coco':
-        dataset = coco_get_dataset(root_dir=data_root_path, mode='train', year=coco_year,
-                                   min_size=CONFIG['image_min_size'], max_size=CONFIG['image_max_size'],
-                                   preprocessing_type=preprocessing_type, caffe_pixel_means=CONFIG['bgr_pixel_means'],
-                                   argument=True, )
+        dataset_configs = {'root_dir': data_root_path,
+                           'mode': 'train', 'year': coco_year,
+                           'min_size': CONFIG['image_min_size'], 'max_size': CONFIG['image_max_size'],
+                           'preprocessing_type': preprocessing_type, 'caffe_pixel_means': CONFIG['bgr_pixel_means'],
+                           'argument': True, }
+        dataset = dataset_factory('coco', 'train', dataset_configs)
     else:
         raise ValueError('unknown dataset type {}'.format(dataset_type))
     return dataset

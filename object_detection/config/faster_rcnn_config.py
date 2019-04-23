@@ -35,7 +35,7 @@ def get_default_pascal_faster_rcnn_config():
         'evaluate_iou_threshold': 0.5,  # 计算map时使用，pred与gt的iou大于该阈值，则当前pred为TP，否则为FP
         'max_objects_per_class_per_image': 50,
         'max_objects_per_image': 50,
-        'predictions_nms_iou_threshold': 0.3,
+        'prediction_nms_iou_threshold': 0.3,
         'prediction_score_threshold': 0.0,
         'show_image_score_threshold': 0.3,  # 用于图像展示
 
@@ -109,9 +109,9 @@ def get_default_coco_faster_rcnn_config():
 
         # predict & evaluate configs
         'evaluate_iou_threshold': 0.5,  # 计算map时使用，pred与gt的iou大于该阈值，则当前pred为TP，否则为FP
-        'max_objects_per_class_per_image': 50,
-        'max_objects_per_image': 50,
-        'predictions_nms_iou_threshold': 0.3,
+        'max_objects_per_class_per_image': 100,
+        'max_objects_per_image': 100,
+        'prediction_nms_iou_threshold': 0.3,
         'prediction_score_threshold': 0.0,
         'show_image_score_threshold': 0.3,  # 用于图像展示
 

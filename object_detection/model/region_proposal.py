@@ -61,12 +61,13 @@ class RegionProposal(tf.keras.Model):
 
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, _ = bboxes_clip_filter(decoded_bboxes, 0, image_shape[0], image_shape[1])
+        tf_logging.debug('rpn proposal net after clip filter  has %d proposals' % tf.size(decoded_bboxes))
 
-        # 3. 根据rpn_score获取num_pre_nms个anchors。
-        num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
-        cur_top_k = tf.minimum(num_pre_nms, tf.size(scores))
-        scores, selected_idx = tf.nn.top_k(scores, k=cur_top_k, sorted=False)
-        decoded_bboxes = tf.gather(decoded_bboxes, selected_idx)
+        # # 3. 根据rpn_score获取num_pre_nms个anchors。
+        # num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test
+        # cur_top_k = tf.minimum(num_pre_nms, tf.size(scores))
+        # scores, selected_idx = tf.nn.top_k(scores, k=cur_top_k, sorted=False)
+        # decoded_bboxes = tf.gather(decoded_bboxes, selected_idx)
 
         # 4. 进行nms。
         # 5. 根据rpn_score排序，获取num_post_nms个anchors作为proposal结果。

@@ -98,6 +98,7 @@ def eval_coco(model,
     :param result_file_path:            path to save result json file
     :param model:                       pre-trained model
     :param dataset_mode:                train or val
+    :param dataset_year:
     :param image_format:
     :param preprocessing_type:
     :param root_path:                   VOC的目录，要具体到某一年
@@ -114,44 +115,44 @@ def eval_coco(model,
 
     res_list = []
     for img, img_scale, raw_h, raw_w, img_id in dataset:
-        final_bboxes, final_labels, final_scores = model(img, False)
-        final_bboxes = final_bboxes / tf.to_float(img_scale)
+        # final_bboxes, final_labels, final_scores = model(img, False)
+        # final_bboxes = final_bboxes / tf.to_float(img_scale)
 
-        # scores, roi_txtytwth, rois = model.im_detect(img, img_scale)
-        # roi_txtytwth = tf.reshape(roi_txtytwth, [-1, num_classes, 4])
-        #
-        # res_score = []
-        # res_bbox = []
-        # res_category = []
-        # for j in range(1, num_classes):
-        #     inds = tf.where(scores[:, j] > config['prediction_score_threshold'])[:, 0]
-        #     cls_scores = tf.gather(scores[:, j], inds)
-        #     cls_boxes = decode_bbox_with_mean_and_std(tf.gather(rois, inds),
-        #                                               tf.gather(roi_txtytwth[:, j, :], inds),
-        #                                               target_means=config['roi_proposal_means'],
-        #                                               target_stds=config['roi_proposal_stds'])
-        #
-        #     cls_boxes, inds = bboxes_clip_filter(cls_boxes, 0, raw_h, raw_w, min_size)
-        #     cls_scores = tf.gather(cls_scores, inds)
-        #     keep = tf.image.non_max_suppression(cls_boxes, cls_scores, config['max_objects_per_class_per_image'],
-        #                                         iou_threshold=config['prediction_score_threshold'])
-        #     if tf.size(keep).numpy() == 0:
-        #         continue
-        #
-        #     res_score.append(tf.gather(cls_scores, keep))
-        #     res_bbox.append(tf.gather(cls_boxes, keep))
-        #     res_category.append(tf.ones_like(keep, dtype=tf.int32) * j)
-        #
-        # scores_after_nms = tf.concat(res_score, axis=0)
-        # bboxes_after_nms = tf.concat(res_bbox, axis=0)
-        # category_after_nms = tf.concat(res_category, axis=0)
-        #
-        # final_scores, final_idx = tf.nn.top_k(scores_after_nms, k=tf.minimum(config['max_objects_per_image'],
-        #                                                                      tf.size(scores_after_nms)),
-        #                                       sorted=False)
-        # final_bboxes = tf.gather(bboxes_after_nms, final_idx).numpy()
-        # final_category = tf.gather(category_after_nms, final_idx).numpy()
-        # final_scores = final_scores.numpy()
+        scores, roi_txtytwth, rois = model.im_detect(img, img_scale)
+        roi_txtytwth = tf.reshape(roi_txtytwth, [-1, num_classes, 4])
+
+        res_score = []
+        res_bbox = []
+        res_category = []
+        for j in range(1, num_classes):
+            inds = tf.where(scores[:, j] > config['prediction_score_threshold'])[:, 0]
+            cls_scores = tf.gather(scores[:, j], inds)
+            cls_boxes = decode_bbox_with_mean_and_std(tf.gather(rois, inds),
+                                                      tf.gather(roi_txtytwth[:, j, :], inds),
+                                                      target_means=config['roi_proposal_means'],
+                                                      target_stds=config['roi_proposal_stds'])
+
+            cls_boxes, inds = bboxes_clip_filter(cls_boxes, 0, raw_h, raw_w, min_size)
+            cls_scores = tf.gather(cls_scores, inds)
+            keep = tf.image.non_max_suppression(cls_boxes, cls_scores, config['max_objects_per_class_per_image'],
+                                                iou_threshold=config['prediction_nms_iou_threshold'])
+            if tf.size(keep).numpy() == 0:
+                continue
+
+            res_score.append(tf.gather(cls_scores, keep))
+            res_bbox.append(tf.gather(cls_boxes, keep))
+            res_category.append(tf.ones_like(keep, dtype=tf.int32) * j)
+
+        scores_after_nms = tf.concat(res_score, axis=0)
+        bboxes_after_nms = tf.concat(res_bbox, axis=0)
+        category_after_nms = tf.concat(res_category, axis=0)
+
+        final_scores, final_idx = tf.nn.top_k(scores_after_nms, k=tf.minimum(config['max_objects_per_image'],
+                                                                             tf.size(scores_after_nms)),
+                                              sorted=False)
+        final_bboxes = tf.gather(bboxes_after_nms, final_idx).numpy()
+        final_labels = tf.gather(category_after_nms, final_idx).numpy()
+        final_scores = final_scores.numpy()
 
         for cur_bbox, cur_label, cur_score in zip(final_bboxes, final_labels, final_scores):
             res_list.append({
