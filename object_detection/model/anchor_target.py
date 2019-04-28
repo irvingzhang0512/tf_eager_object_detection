@@ -71,7 +71,9 @@ class AnchorTarget(tf.keras.Model):
         # 筛选正例反例
         fg_inds = tf.where(tf.equal(labels, 1))[:, 0]
         if tf.size(fg_inds) > self._max_pos_samples:
-            disable_inds = tf.random_shuffle(fg_inds)[self._max_pos_samples:]
+            fg_inds = tf.random_shuffle(fg_inds)
+            disable_inds = fg_inds[self._max_pos_samples:]
+            fg_inds = fg_inds[:self._max_pos_samples]
             labels = tf.scatter_update(tf.Variable(labels), disable_inds, -1)
         num_bg = self._total_num_samples - tf.reduce_sum(tf.to_int32(tf.equal(labels, 1)))
         bg_inds = tf.where(tf.equal(labels, 0))[:, 0]

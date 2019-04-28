@@ -61,7 +61,6 @@ class RegionProposal(tf.keras.Model):
 
         # 2. 对选中修正后的anchors进行处理
         decoded_bboxes, _ = bboxes_clip_filter(decoded_bboxes, 0, image_shape[0], image_shape[1])
-        tf_logging.debug('rpn proposal net after clip filter  has %d proposals' % tf.size(decoded_bboxes))
 
         # # 3. 根据rpn_score获取num_pre_nms个anchors。
         # num_pre_nms = self._num_pre_nms_train if training else self._num_pre_nms_test

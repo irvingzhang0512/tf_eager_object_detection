@@ -95,7 +95,7 @@ def get_default_coco_faster_rcnn_config():
         'extractor_stride': 16,
 
         # training configs
-        'learning_rate_multi_decay_steps': [470000],
+        'learning_rate_multi_decay_steps': [350000],
         'learning_rate_multi_lrs': [1e-3, 1e-4],
         'learning_rate_bias_double': True,
         'optimizer_momentum': 0.9,

@@ -105,7 +105,7 @@ class CocoDataset:
                 img_info_dict[i] = info
         return img_ids, img_info_dict
 
-    def _parse_ann_info(self, ann_info):
+    def _parse_ann_info(self, ann_infos):
         """Parse bbox annotation.
 
         Args
@@ -121,13 +121,13 @@ class CocoDataset:
         gt_labels = []
         gt_labels_text = []
 
-        for i, ann in enumerate(ann_info):
+        for i, ann in enumerate(ann_infos):
             if ann.get('ignore', False):
                 continue
             x1, y1, w, h = ann['bbox']
             if ann['area'] <= 0 or w < 1 or h < 1:
                 continue
-            bbox = [y1, x1, min(y1 + h - 1., h-1.), min(x1 + w - 1., w-1.)]
+            bbox = [y1, x1, y1 + h - 1., x1 + w - 1.]
             gt_bboxes.append(bbox)
             gt_labels.append(self._cat_id_to_raw_id[ann['category_id']])
             gt_labels_text.append(self._cat_id_to_name_dict[ann['category_id']])
@@ -146,8 +146,8 @@ class CocoDataset:
     def __getitem__(self, img_id):
         # 获取 annotation dict 信息
         ann_ids = self._coco.getAnnIds(imgIds=img_id)
-        ann_info = self._coco.loadAnns(ann_ids)
-        gt_bboxes, gt_labels, _ = self._parse_ann_info(ann_info)
+        ann_infos = self._coco.loadAnns(ann_ids)
+        gt_bboxes, gt_labels, _ = self._parse_ann_info(ann_infos)
 
         # 设置 bboxes 范围为 [0, 1]
         image_height, image_width = self._img_info_dict[img_id]['height'], self._img_info_dict[img_id]['width']
